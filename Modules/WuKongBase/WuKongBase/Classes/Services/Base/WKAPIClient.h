@@ -114,6 +114,13 @@ NS_ASSUME_NONNULL_BEGIN
  @return 任务对象
  */
 -(NSURLSessionDownloadTask*_Nullable) createDownloadTask:(NSString*_Nonnull)path storePath:(NSString*_Nonnull)storePath progress:(void (^_Nullable)(NSProgress *  _Nullable downloadProgress)) downloadProgressBlock completeCallback:(void(^_Nullable)(NSError * _Nullable error)) completeCallback;
+
+/// Whether the URL host is the configured API or scan-link host (same-origin as native API calls).
+- (BOOL)isURLHostTrustedForAPIAuth:(NSURL *)url;
+
+/// For WKWebView loads to the app API / scan host: merge public headers (e.g. token, bundle_id) like native requests.
+- (void)attachPublicHTTPHeadersForWebViewIfNeeded:(NSMutableURLRequest *)request;
+
 @end
 
 

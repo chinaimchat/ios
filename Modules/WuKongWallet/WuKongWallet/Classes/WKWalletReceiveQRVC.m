@@ -25,7 +25,6 @@ static const CGFloat kQrInnerMargin = 12.0;
 @property (nonatomic, strong) UIView *qrFrameView;
 @property (nonatomic, strong) UIImageView *qrImageView;
 @property (nonatomic, strong) UILabel *hintLabel;
-@property (nonatomic, strong) UIActivityIndicatorView *loadingView;
 
 @property (nonatomic, strong) UIButton *saveNavButton;
 
@@ -101,10 +100,6 @@ static const CGFloat kQrInnerMargin = 12.0;
     self.qrImageView.backgroundColor = UIColor.clearColor;
     [self.qrFrameView addSubview:self.qrImageView];
 
-    self.loadingView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
-    self.loadingView.hidesWhenStopped = YES;
-    [self.qrFrameView addSubview:self.loadingView];
-
     self.hintLabel = [[UILabel alloc] init];
     self.hintLabel.textAlignment = NSTextAlignmentCenter;
     self.hintLabel.font = [UIFont systemFontOfSize:13];
@@ -161,7 +156,6 @@ static const CGFloat kQrInnerMargin = 12.0;
     CGFloat qy = kQrInnerMargin;
     CGFloat qside = qrSide;
     self.qrImageView.frame = CGRectMake(qx, qy, qside, qside);
-    self.loadingView.center = CGPointMake(CGRectGetMidX(self.qrFrameView.bounds), CGRectGetMidY(self.qrFrameView.bounds));
 
     CGFloat hy = CGRectGetMaxY(self.qrFrameView.frame) + 14.0;
     self.hintLabel.frame = CGRectMake(kCardInnerPadH, hy, hintW, hintH);
@@ -186,27 +180,9 @@ static const CGFloat kQrInnerMargin = 12.0;
     self.nameLabel.text = ([name isKindOfClass:[NSString class]] && [(NSString *)name length] > 0) ? (NSString *)name : uid;
     self.avatarView.url = [WKAvatarUtil getAvatar:uid];
 
-    [self.loadingView startAnimating];
-    __weak typeof(self) weakSelf = self;
-    [[WKAPIClient sharedClient] GET:@"/v1/wallet/receive/qrcode" parameters:nil].then(^(id result) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [weakSelf.loadingView stopAnimating];
-            NSString *payload = [weakSelf extractPayloadFromResult:result];
-            if (payload.length == 0) {
-                payload = [weakSelf buildReceiveURIWithUid:uid];
-            }
-            [weakSelf setQrPayloadAndRender:payload];
-        });
-    }).catch(^(NSError *error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [weakSelf.loadingView stopAnimating];
-            NSString *payload = [weakSelf buildReceiveURIWithUid:uid];
-            [weakSelf setQrPayloadAndRender:payload];
-            if (error) {
-                WKLogInfo(@"钱包收款码接口失败，已使用本地兜底 payload: %@", error.localizedDescription ?: @"");
-            }
-        });
-    });
+    // 后端未提供 GET /v1/wallet/receive/qrcode：与 Android WalletReceiveQrActivity 一致，本地生成 mtp 载荷。
+    NSString *payload = [self buildReceiveURIWithUid:uid];
+    [self setQrPayloadAndRender:payload];
 }
 
 - (void)setQrPayloadAndRender:(NSString *)payload {
@@ -217,38 +193,6 @@ static const CGFloat kQrInnerMargin = 12.0;
         self.needsQrRedrawAfterLayout = YES;
         [self.view setNeedsLayout];
     }
-}
-
-- (NSString *)extractPayloadFromResult:(id)result {
-    if (![result isKindOfClass:[NSDictionary class]]) {
-        return nil;
-    }
-    NSDictionary *dict = (NSDictionary *)result;
-    NSString *payload = [self extractPayloadFromObject:dict];
-    if (payload.length > 0) {
-        return payload;
-    }
-    id data = dict[@"data"];
-    payload = [self extractPayloadFromObject:data];
-    return payload.length > 0 ? payload : nil;
-}
-
-- (NSString *)extractPayloadFromObject:(id)obj {
-    if ([obj isKindOfClass:[NSString class]]) {
-        NSString *s = [(NSString *)obj stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-        return s.length > 0 ? s : nil;
-    }
-    if ([obj isKindOfClass:[NSDictionary class]]) {
-        NSDictionary *dict = (NSDictionary *)obj;
-        NSArray<NSString *> *keys = @[ @"qrcode", @"qr_code", @"qr", @"content", @"url", @"data", @"payload" ];
-        for (NSString *k in keys) {
-            NSString *v = [self extractPayloadFromObject:dict[k]];
-            if (v.length > 0) {
-                return v;
-            }
-        }
-    }
-    return nil;
 }
 
 - (void)renderQRCodeWithPayload:(NSString *)payload {

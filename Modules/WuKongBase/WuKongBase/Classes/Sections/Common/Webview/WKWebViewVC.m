@@ -91,6 +91,13 @@
 
 @implementation WKWebViewVC
 
+- (void)wk_applyAPIAuthHeadersToMutableRequest:(NSMutableURLRequest *)request {
+    if (!request) {
+        return;
+    }
+    [[WKAPIClient sharedClient] attachPublicHTTPHeadersForWebViewIfNeeded:request];
+}
+
 - (BOOL)hasLoadedWebSession {
     return _webView != nil && _webView.URL.absoluteString.length > 0;
 }
@@ -116,6 +123,7 @@
                                                              cachePolicy:NSURLRequestReloadIgnoringCacheData
                                                          timeoutInterval:10.0];
     [request setValue:[WKApp shared].config.langue forHTTPHeaderField:@"Accept-Language"];
+    [self wk_applyAPIAuthHeadersToMutableRequest:request];
     [self.webView loadRequest:request];
     [self checkGoAndGobackBtn];
 }
@@ -151,6 +159,7 @@
     timeoutInterval:(NSTimeInterval)10.0];
     
     [request setValue:[WKApp shared].config.langue forHTTPHeaderField:@"Accept-Language"];
+    [self wk_applyAPIAuthHeadersToMutableRequest:request];
     
     [self.webView loadRequest:request];
     self.skipInitialReload = NO;
@@ -463,6 +472,24 @@
      */
     NSLog(@"%@",navigationAction.request.allHTTPHeaderFields);
     NSString* reqUrl = navigationAction.request.URL.absoluteString;
+
+    // 扫码等场景会打开与 API 同域的链接；WKWebView 默认不带 token，服务端返回 JSON 被当成网页展示。
+    if (navigationAction.targetFrame.isMainFrame) {
+        NSString *method = navigationAction.request.HTTPMethod;
+        BOOL isGetLike = !method.length || [method.uppercaseString isEqualToString:@"GET"] || [method.uppercaseString isEqualToString:@"HEAD"];
+        if (isGetLike && [[WKAPIClient sharedClient] isURLHostTrustedForAPIAuth:navigationAction.request.URL]) {
+            NSString *beforeToken = [navigationAction.request valueForHTTPHeaderField:@"token"];
+            NSMutableURLRequest *authenticated = [navigationAction.request mutableCopy];
+            [self wk_applyAPIAuthHeadersToMutableRequest:authenticated];
+            NSString *afterToken = [authenticated valueForHTTPHeaderField:@"token"];
+            if (afterToken.length && !beforeToken.length) {
+                decisionHandler(WKNavigationActionPolicyCancel);
+                [webView loadRequest:authenticated];
+                return;
+            }
+        }
+    }
+
     if([reqUrl hasPrefix:@"http"] && ![self.url.host containsString:@"pgyer.com"]) { // pgyper 特殊处理下
         self.currentUrl = navigationAction.request.URL;
         WKWorkplaceWebBubbleStore *store = [WKWorkplaceWebBubbleStore shared];

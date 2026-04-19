@@ -160,6 +160,21 @@ static NSString *WKResolvedIMConnectToken(WKLoginInfo *loginInfo) {
     return @"";
 }
 
+/// 扫码解析结果里 H5 / webview 要打开的链接（如入群 join_group.html）；与后端说明「未在群内常见 data.url」一致。
+static NSString *WKScanResultDataURLString(NSDictionary *data) {
+    if (![data isKindOfClass:[NSDictionary class]] || data.count == 0) {
+        return @"";
+    }
+    id u = data[@"url"];
+    if ([u isKindOfClass:[NSString class]]) {
+        return [(NSString *)u copy];
+    }
+    if (u == nil || u == [NSNull null]) {
+        return @"";
+    }
+    return [NSString stringWithFormat:@"%@", u];
+}
+
 /// 与钱包等模块一致：部分接口把业务字段包在 data 里；Android 侧 Retrofit 可能已拆包，iOS 这里需兼容多种 JSON 形状，否则取不到地址会一直重试、表现为 IM 连不上。
 static NSString *WKImTcpAddrFromAPIPayload(id payload) {
     if (![payload isKindOfClass:[NSDictionary class]]) {
@@ -1567,18 +1582,25 @@ static  UIBackgroundTaskIdentifier _bgTaskToken;
     
     // ---------- 扫一扫  ----------
     
-    // 扫码进群
+    // 扫码进群（已在群内：仅 group_no；未进群：常见 data.url 走 H5，由 webview 处理器优先处理）
     [self setMethod:WKPOINT_SCAN_HANDLER_JOIN_GROUP handler:^id _Nullable(id  _Nonnull param) {
         return [WKScanHandler handle:^BOOL(WKScanResult * _Nonnull result, void (^ _Nonnull reScanBlock)(void)) {
             if(![result.type isEqualToString:@"group"]) {
                 return false;
             }
+            if (WKScanResultDataURLString(result.data).length > 0) {
+                return false;
+            }
+            NSString *groupNo = result.data[@"group_no"]?:@"";
+            if(groupNo.length == 0) {
+                return false;
+            }
             WKConversationVC *vc = [WKConversationVC new];
-            vc.channel = [[WKChannel alloc] initWith:result.data[@"group_no"]?:@"" channelType:WK_GROUP];
+            vc.channel = [[WKChannel alloc] initWith:groupNo channelType:WK_GROUP];
             [[WKNavigationManager shared] replacePushViewController:vc animated:YES];
             return true;
         }];
-    } category:WKPOINT_CATEGORY_SCAN_HANDLER];
+    } category:WKPOINT_CATEGORY_SCAN_HANDLER sort:0];
     
     // 扫码加好友(跳到用户信息界面)
     [self setMethod:WKPOINT_SCAN_HANDLER_ADD_FRIEND handler:^id _Nullable(id  _Nonnull param) {
@@ -1598,18 +1620,25 @@ static  UIBackgroundTaskIdentifier _bgTaskToken;
         }];
     } category:WKPOINT_CATEGORY_SCAN_HANDLER];
     
-    // webview
+    // webview / forward=h5 / 未入群入群 H5（sort 大优先于 join_group）
     [self setMethod:WKPOINT_SCAN_HANDLER_WEBVIEW handler:^id _Nullable(id  _Nonnull param) {
         return [WKScanHandler handle:^BOOL(WKScanResult * _Nonnull result, void (^ _Nonnull reScanBlock)(void)) {
-            if(![result.type isEqualToString:@"webview"]) {
+            NSString *urlStr = WKScanResultDataURLString(result.data);
+            if(urlStr.length == 0) {
+                return false;
+            }
+            BOOL forwardH5 = result.forward && [[result.forward lowercaseString] isEqualToString:@"h5"];
+            BOOL typeWebview = [result.type isEqualToString:@"webview"];
+            BOOL groupJoinH5 = [result.type isEqualToString:@"group"];
+            if(!typeWebview && !forwardH5 && !groupJoinH5) {
                 return false;
             }
             WKWebViewVC *vc = [WKWebViewVC new];
-            vc.url = [NSURL URLWithString:result.data[@"url"]];
+            vc.url = [NSURL URLWithString:urlStr];
             [[WKNavigationManager shared] replacePushViewController:vc animated:YES];
             return true;
         }];
-    } category:WKPOINT_CATEGORY_SCAN_HANDLER];
+    } category:WKPOINT_CATEGORY_SCAN_HANDLER sort:9000];
     
     // ---------- 最近会话列表的+  ----------
     

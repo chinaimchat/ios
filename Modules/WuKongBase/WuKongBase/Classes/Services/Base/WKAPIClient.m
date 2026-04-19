@@ -386,6 +386,43 @@
     }
 }
 
+- (BOOL)isURLHostTrustedForAPIAuth:(NSURL *)url {
+    if (!url.host.length) {
+        return NO;
+    }
+    NSString *host = url.host.lowercaseString;
+    NSString *apiBase = [WKApp shared].config.apiBaseUrl ?: @"";
+    if (apiBase.length) {
+        NSURL *apiURL = [NSURL URLWithString:apiBase];
+        if (apiURL.host.length && [apiURL.host.lowercaseString isEqualToString:host]) {
+            return YES;
+        }
+    }
+    NSString *scan = [WKApp shared].config.scanURLPrefix ?: @"";
+    if (scan.length) {
+        NSURL *scanURL = [NSURL URLWithString:scan];
+        if (scanURL.host.length && [scanURL.host.lowercaseString isEqualToString:host]) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+- (void)attachPublicHTTPHeadersForWebViewIfNeeded:(NSMutableURLRequest *)request {
+    if (!request.URL || ![self isURLHostTrustedForAPIAuth:request.URL]) {
+        return;
+    }
+    if (!self.config.publicHeaderBLock) {
+        return;
+    }
+    NSDictionary *headers = self.config.publicHeaderBLock();
+    [headers enumerateKeysAndObjectsUsingBlock:^(id _Nonnull key, id _Nonnull obj, BOOL * _Nonnull stop) {
+        if ([obj isKindOfClass:[NSString class]] && [(NSString *)obj length] > 0) {
+            [request setValue:obj forHTTPHeaderField:key];
+        }
+    }];
+}
+
 -(id) resultToModel:(id)responseObj model:(Class)modelClass{
     __weak typeof(self) weakSelf = self;
     id resultObj = responseObj;
