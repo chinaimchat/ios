@@ -6,6 +6,11 @@
 "确认"="Confirm";
 "已确认"="Confirmed";
 
+// WKContactsFriendRequestVC agree
+"同意加好友"="Accept friend request";
+"可填写向对方展示的自我介绍，不填则使用默认"="Optional greeting shown to the other party. Leave blank to use the default.";
+"自我介绍（选填）"="Self-introduction (optional)";
+
 "取消"="Cancel";
 
 "%ld个朋友"="%ld friends";

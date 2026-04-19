@@ -53,10 +53,33 @@
     [[WKApp shared] invoke:WKPOINT_CONVERSATION_ADDCONTACTS param:nil];
 }
 
-// 确认邀请
+// 确认邀请（先输入可选自我介绍，再提交 friend/sure）
 -(void) requestFriendSure:(WKFriendRequestDBModel*)model {
+    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:LLang(@"同意加好友") message:LLang(@"可填写向对方展示的自我介绍，不填则使用默认") preferredStyle:UIAlertControllerStyleAlert];
     __weak typeof(self) weakSelf = self;
-    [[WKAPIClient sharedClient] POST:@"friend/sure" parameters:@{@"token":model.token}].then(^(){
+    [alertController addAction:[UIAlertAction actionWithTitle:LLang(@"取消") style:UIAlertActionStyleCancel handler:nil]];
+    [alertController addAction:[UIAlertAction actionWithTitle:LLang(@"确定") style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        UITextField *tf = alertController.textFields.firstObject;
+        NSString *remark = [[tf.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] copy];
+        if (remark.length > 100) {
+            remark = [remark substringToIndex:100];
+        }
+        [weakSelf submitFriendSure:model remark:remark];
+    }]];
+    [alertController addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
+        textField.placeholder = LLang(@"自我介绍（选填）");
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [self presentViewController:alertController animated:YES completion:nil];
+}
+
+-(void) submitFriendSure:(WKFriendRequestDBModel*)model remark:(NSString*)remark {
+    NSMutableDictionary *params = [NSMutableDictionary dictionaryWithObject:model.token forKey:@"token"];
+    if (remark.length > 0) {
+        params[@"remark"] = remark;
+    }
+    __weak typeof(self) weakSelf = self;
+    [[WKAPIClient sharedClient] POST:@"friend/sure" parameters:params].then(^(){
         // 更新状态
         [[WKContactsManager shared] updateFriendRequestStatus:model.uid status:WKFriendRequestStatusSured];
         [weakSelf startSyncContacts:model.uid];
