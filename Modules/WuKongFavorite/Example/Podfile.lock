@@ -1,0 +1,16 @@
+PODS:
+  - LiMaoFavorite (0.1.0)
+
+DEPENDENCIES:
+  - LiMaoFavorite (from `../`)
+
+EXTERNAL SOURCES:
+  LiMaoFavorite:
+    :path: "../"
+
+SPEC CHECKSUMS:
+  LiMaoFavorite: 12bfdf0df20675b1c77a2f12a4e6b6c95db48ef7
+
+PODFILE CHECKSUM: ff16549a5fcb798b6f84cc43e0e7b39872a11e86
+
+COCOAPODS: 1.8.0

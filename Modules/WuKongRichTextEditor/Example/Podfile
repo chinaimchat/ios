@@ -1,0 +1,6 @@
+use_frameworks!
+target 'LiMaoRichTextEditor_Tests' do
+  pod 'LiMaoRichTextEditor', :path => '../'
+  
+  
+end

@@ -1,0 +1,6 @@
+use_frameworks!
+target 'WuKongPinned_Tests' do
+  pod 'WuKongPinned', :path => '../'
+  
+  
+end

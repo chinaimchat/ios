@@ -1,0 +1,6 @@
+use_frameworks!
+target 'LiMaoLabel_Tests' do
+  pod 'LiMaoLabel', :path => '../'
+  
+  
+end

@@ -1,0 +1,70 @@
+# Xcode
+## User settings
+xcuserdata/
+**/xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+
+## compatibility with Xcode 8 and earlier
+*.xcscmblueprint
+*.xccheckout
+
+## Xcode build outputs
+build/
+**/build/
+DerivedData/
+**/DerivedData/
+.DerivedData*
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+
+## Obj-C/Swift
+*.hmap
+
+## App packaging
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# CocoaPods（一律不提交，谁拉代码自己 pod install）
+Pods/
+**/Pods/
+.cocoapods_home/
+.home/
+**/Caches/
+**/Local Podspecs/
+
+# Carthage
+Carthage/Build/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Code Injection
+iOSInjectionProject/
+
+Modules/LiMaoQCRTC/LiMaoQCRTC/RTC/sdk/WebRTC.framework/WebRTC
+
+# macOS junk
+.DS_Store
+**/.DS_Store
+.DS_Store?
+
+# 第三方原生构建中间产物
+third_party/**/build/
+
+# 签名 / 私钥（绝不能提交）
+*.p12
+*.cer
+*.mobileprovision
+*.certSigningRequest

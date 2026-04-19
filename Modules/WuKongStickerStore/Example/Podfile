@@ -1,0 +1,6 @@
+use_frameworks!
+target 'LiMaoStickerStore_Tests' do
+  pod 'LiMaoStickerStore', :path => '../'
+  
+  
+end

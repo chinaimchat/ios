@@ -1,0 +1,6 @@
+use_frameworks!
+target 'LiMaoFavorite_Tests' do
+  pod 'LiMaoFavorite', :path => '../'
+  
+  
+end

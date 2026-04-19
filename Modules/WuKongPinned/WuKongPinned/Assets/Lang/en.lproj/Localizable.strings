@@ -1,0 +1,9 @@
+"消息置顶" = "Pinned Message";
+"您确定要为所有人解除此消息的置顶吗？" = "Are you sure you want to unpin this message for everyone?";
+"取消" = "Cancel";
+"确认" = "Ok";
+"取消所有置顶消息" = "UNPIN ALL MESSAGES";
+"置顶" = "Pin";
+"取消置顶" = "Unpin";
+"关闭" = "Close";
+"%ld 条置顶消息" = "%ld Pinned Messages";

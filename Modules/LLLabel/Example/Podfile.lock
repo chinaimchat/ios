@@ -1,0 +1,16 @@
+PODS:
+  - LiMaoLabel (0.1.0)
+
+DEPENDENCIES:
+  - LiMaoLabel (from `../`)
+
+EXTERNAL SOURCES:
+  LiMaoLabel:
+    :path: "../"
+
+SPEC CHECKSUMS:
+  LiMaoLabel: a23c669151dd083349ebaaa06cf289537fdc70a3
+
+PODFILE CHECKSUM: 4cfc24b6846830284f89c89c1e1e2e80010a804d
+
+COCOAPODS: 1.9.3
