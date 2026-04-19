@@ -13,6 +13,8 @@
 #import "WKWebViewVC.h"
 #import "WKCopyLabel.h"
 #import "WKConversationVC.h"
+#import "WKAvatarUtil.h"
+#import "WKApp.h"
 #define textToAvatarLeftSpace 10.0f // 文本距头像的左边距离
 
 @interface WKUserInfoVC ()<WKUserInfoVMDelegate,WKChannelManagerDelegate>
@@ -97,6 +99,7 @@
     [[WKSDK shared].channelManager addDelegate:self];
     
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(memberUpdate:) name:WKNOTIFY_GROUP_MEMBERUPDATE object:nil];
+    [WKApp.shared addChannelAvatarUpdateNotify:self selector:@selector(channelAvatarUpdated:)];
 }
 
 
@@ -114,6 +117,15 @@
     }
 }
 
+-(void) channelAvatarUpdated:(NSNotification*)notify {
+    WKChannel *channel = notify.object;
+    if(!channel || channel.channelType != WK_PERSON || ![channel.channelId isEqualToString:self.uid]) {
+        return;
+    }
+    [[WKSDK shared].channelManager fetchChannelInfo:channel];
+    [self.userAvatarView reloadAvatarBypassingCache];
+}
+
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
 }
@@ -121,6 +133,7 @@
 - (void)dealloc {
     [[WKSDK shared].channelManager removeDelegate:self];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:WKNOTIFY_GROUP_MEMBERUPDATE object:nil];
+    [WKApp.shared removeChannelAvatarUpdateNotify:self];
 }
 
 // 获取需要显示的名字（如果有备注显示备注，没备注显示昵称）
@@ -137,6 +150,11 @@
     if(self.viewModel.channelInfo) {
         self.userAvatarView.hidden = NO;
         self.footerHeader.hidden = NO;
+        if(self.viewModel.channelInfo.logo && ![self.viewModel.channelInfo.logo isEqualToString:@""]) {
+            self.userAvatarView.url = [WKAvatarUtil getFullAvatarWIthPath:self.viewModel.channelInfo.logo];
+        } else {
+            self.userAvatarView.url = [WKAvatarUtil getAvatar:self.uid];
+        }
     }
     
     [self.userInfoBoxView.subviews makeObjectsPerformSelector:@selector(removeFromSuperview)];

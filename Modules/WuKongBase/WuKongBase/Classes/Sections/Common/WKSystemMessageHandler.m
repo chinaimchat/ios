@@ -300,6 +300,7 @@ bool needRemind = false; // 是否需要提醒
         [[SDImageCache sharedImageCache] removeImageForKey:[WKAvatarUtil getGroupAvatar:param[@"group_no"]] withCompletion:nil];
         
         [WKApp.shared notifyChannelAvatarUpdate:[WKChannel channelID:param[@"group_no"] channelType:WK_GROUP]];
+        [[WKSDK shared].channelManager fetchChannelInfo:[[WKChannel alloc] initWith:param[@"group_no"] channelType:WK_GROUP]];
         
     } else if([cmd isEqualToString:WKCMDUserAvatarUpdate] && param&&param[@"uid"]) { // 用户头像更新
         WKLogDebug(@"处理用户头像更新！->%@",[WKAvatarUtil getAvatar:param[@"uid"]]);
@@ -307,6 +308,7 @@ bool needRemind = false; // 是否需要提醒
         [[SDImageCache sharedImageCache] removeImageForKey:[WKAvatarUtil getAvatar:param[@"uid"]] withCompletion:nil];
         
         [WKApp.shared notifyChannelAvatarUpdate:[WKChannel channelID:param[@"uid"] channelType:WK_PERSON]];
+        [[WKSDK shared].channelManager fetchChannelInfo:[[WKChannel alloc] initWith:param[@"uid"] channelType:WK_PERSON]];
         
     } else if([cmd isEqualToString:WKCMDChannelUpdate]) { // 频道信息更新
         WKLogDebug(@"处理频道信息更新！");

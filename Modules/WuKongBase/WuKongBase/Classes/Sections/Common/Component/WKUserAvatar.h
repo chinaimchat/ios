@@ -22,6 +22,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property(nonatomic,strong) WKImageView *avatarImgView;
 
+/// 使用当前 `url` 重新拉取图片（忽略内存/磁盘缓存），用于头像 URL 未变但远端已更新的场景。
+- (void)reloadAvatarBypassingCache;
 
 @end
 

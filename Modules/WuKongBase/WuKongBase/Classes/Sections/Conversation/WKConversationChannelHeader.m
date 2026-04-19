@@ -58,6 +58,7 @@
     WKChannel *channel = notify.object;
     if(self.channelInfo && channel && [channel isEqual:self.channelInfo.channel]) {
         [self setChannelInfo:self.channelInfo]; // 重新刷新频道信息
+        [self.avatarImgView reloadAvatarBypassingCache];
     }
     
 }

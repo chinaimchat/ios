@@ -9,6 +9,8 @@
 
 #import "WKApp.h"
 #import "UIView+WK.h"
+#import "UIImageView+WK.h"
+#import <SDWebImage/SDWebImage.h>
 
 
 @interface WKUserAvatar ()
@@ -49,6 +51,14 @@
 - (void)setUrl:(NSString *)url {
     _url = url;
     [_avatarImgView loadImage:[NSURL URLWithString:url] placeholderImage:[WKApp shared].config.defaultAvatar];
+}
+
+- (void)reloadAvatarBypassingCache {
+    if(!_url.length) {
+        return;
+    }
+    [self.avatarImgView sd_cancelCurrentImageLoad];
+    [self.avatarImgView lim_setImageWithURL:[NSURL URLWithString:_url] placeholderImage:[WKApp shared].config.defaultAvatar options:SDWebImageRefreshCached context:nil];
 }
 
 - (void)setBorderWidth:(CGFloat)borderWidth {
