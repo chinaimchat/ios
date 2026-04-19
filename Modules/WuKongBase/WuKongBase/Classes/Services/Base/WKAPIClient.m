@@ -387,6 +387,16 @@
 }
 
 - (BOOL)isURLHostTrustedForAPIAuth:(NSURL *)url {
+    // 是否给 WebView/外部跳转的 URL 自动附带 token。
+    //
+    // 历史实现只对比 host：当服务端把二维码 URL 的 host 配成与 apiBaseUrl 不同的子域
+    // （例如 apiBaseUrl=`http://www.tu2t0.com/v1/`，二维码=`http://web.tu2t0.com/api/v1/qrcode/<uuid>`）
+    // 时，WebView 不会带 token，server 端 AuthMiddleware 直接 401，用户在 App 里只能
+    // 看到一串 URL，无法走「确认登录」/ 加好友等业务。
+    //
+    // 这里与 Android `ScanUtils.handleScanResult` 保持一致的精神：除了 host 白名单之外，
+    // 只要 URL 的 path 命中已知 API 段（当前仅放开 `/qrcode/`），也视为可信；
+    // 这样跨子域的二维码也能附带 token，但不会给随便一个第三方网页加 token。
     if (!url.host.length) {
         return NO;
     }
@@ -404,6 +414,10 @@
         if (scanURL.host.length && [scanURL.host.lowercaseString isEqualToString:host]) {
             return YES;
         }
+    }
+    // 跨 host 兜底：path 含 `/qrcode/` 视为业务二维码 URL（与 Android 仅按 path 判定的策略对齐）。
+    if (url.path.length && [url.path containsString:@"/qrcode/"]) {
+        return YES;
     }
     return NO;
 }

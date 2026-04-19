@@ -190,13 +190,26 @@
 }
 
 +(BOOL) isQRCodeURL:(NSString*)scanResult {
-    if([scanResult hasPrefix:@"http"]) {
-        NSURL *scanResultURL = [NSURL URLWithString:scanResult];
-        NSURL *scanPrefixURL = [NSURL URLWithString:[WKApp shared].config.scanURLPrefix];
-        
-        if([scanResultURL.host isEqualToString:scanPrefixURL.host] && [scanResultURL.path containsString:scanPrefixURL.path]) {
-            return true;
-        }
+    // 与 Android `ScanUtils.handleScanResult` 行为一致：仅比较 path 里是否包含 `qrcode/`，
+    // 忽略 host。原因：服务端二维码 URL 的 host 取自 `External.BaseURL`，可能是 IP+端口
+    // （如 `http://143.92.52.222:8090/v1/qrcode/<uuid>`）也可能是公网域名
+    // （如 `http://web.tu2t0.com/api/v1/qrcode/<uuid>`），并不一定与 App 配置的 apiBaseUrl
+    // 同 host；如果在这里要求 host 完全相等，App 内扫一扫会把这种二维码当成普通链接
+    // 用 WebView 打开，WebView 不会带 token，server 在 AuthMiddleware 直接返回 401，
+    // 用户只能看到一串 URL，无法走到「确认登录」/ 加好友等业务。
+    if (![scanResult hasPrefix:@"http"]) {
+        return false;
+    }
+    NSURL *scanResultURL = [NSURL URLWithString:scanResult];
+    NSURL *scanPrefixURL = [NSURL URLWithString:[WKApp shared].config.scanURLPrefix];
+    NSString *scanPath = scanPrefixURL.path ?: @"/v1/qrcode/";
+    if (scanPath.length > 0 && [scanResultURL.path containsString:scanPath]) {
+        return true;
+    }
+    // 兜底：直接判断 path 中是否含有 `qrcode/`，兼容 server 把 baseURL
+    // 配成带 `/api` 前缀（`/api/v1/qrcode/<uuid>`）或不带（`/v1/qrcode/<uuid>`）等场景。
+    if (scanResultURL.path && [scanResultURL.path containsString:@"/qrcode/"]) {
+        return true;
     }
     return false;
 }
