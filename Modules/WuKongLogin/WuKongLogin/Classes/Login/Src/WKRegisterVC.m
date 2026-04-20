@@ -54,6 +54,7 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
 @property(nonatomic,strong) UIView *confirmPasswordBoxView; // 确认密码box view
 @property(nonatomic,strong) UIView *confirmPasswordBottomLineView; // 确认密码底部输入线
 @property(nonatomic,strong) UITextField *confirmPasswordTextField; // 确认密码输入
+@property(nonatomic,strong) UIButton *confirmEyeBtn; // 确认密码眼睛（独立 toggle 确认密码栏）
 
 // ---------- 邀请码相关 ----------
 
@@ -114,6 +115,7 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
     [self.view addSubview:self.confirmPasswordBoxView];
     [self.confirmPasswordBoxView addSubview:self.confirmPasswordBottomLineView];
     [self.confirmPasswordBoxView addSubview:self.confirmPasswordTextField];
+    [self.confirmPasswordBoxView addSubview:self.confirmEyeBtn];
     
     // 未开启邀请码注册时整栏不加入视图，避免出现仅底线的「空白第三栏」
     if (WKApp.shared.remoteConfig.inviteCodeSystemOn) {
@@ -340,6 +342,19 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
     }
     return _confirmPasswordTextField;
 }
+- (UIButton *)confirmEyeBtn {
+    if(!_confirmEyeBtn) {
+        CGFloat width = 32.0f;
+        CGFloat height = 32.0f;
+        _confirmEyeBtn = [[UIButton alloc] initWithFrame:CGRectMake(self.view.lim_width - 20.0f - width, self.confirmPasswordBoxView.lim_height/2.0f - height/2.0f, width, height)];
+        [_confirmEyeBtn setImage:[[WKApp shared] loadImage:@"BtnEyeOff" moduleID:@"WuKongLogin"] forState:UIControlStateNormal];
+        [_confirmEyeBtn setImage:[[WKApp shared] loadImage:@"BtnEyeOn" moduleID:@"WuKongLogin"] forState:UIControlStateSelected];
+        _confirmEyeBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
+        [_confirmEyeBtn setImageEdgeInsets:UIEdgeInsetsMake(height/4.0f, width, height/4.0f, width)];
+        [_confirmEyeBtn addTarget:self action:@selector(confirmPasswordLookPressed:) forControlEvents:UIControlEventTouchUpInside];
+    }
+    return _confirmEyeBtn;
+}
 
 
 // ---------- 邀请码 ----------
@@ -430,10 +445,14 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
     [[WKNavigationManager shared] popViewControllerAnimated:YES];
 }
 
-// 密码那个小眼睛点击
+// 密码栏眼睛：只切换本栏可见性，避免“瞟一眼确认栏也把密码栏暴露给肩膀后的人”
 -(void) passwordLookPressed:(UIButton*)btn {
     btn.selected = !btn.selected;
     _passwordTextField.secureTextEntry = !btn.selected;
+}
+// 确认密码栏眼睛：同上，独立切换自己
+-(void) confirmPasswordLookPressed:(UIButton*)btn {
+    btn.selected = !btn.selected;
     _confirmPasswordTextField.secureTextEntry = !btn.selected;
 }
 // 国家点击
