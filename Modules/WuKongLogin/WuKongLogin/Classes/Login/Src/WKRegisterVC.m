@@ -116,7 +116,7 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
     [self.confirmPasswordBoxView addSubview:self.confirmPasswordTextField];
     
     // 未开启邀请码注册时整栏不加入视图，避免出现仅底线的「空白第三栏」
-    if (WKApp.shared.remoteConfig.registerInviteOn) {
+    if (WKApp.shared.remoteConfig.inviteCodeSystemOn) {
         [self.view addSubview:self.inviteCodeBoxView];
         [self.inviteCodeBoxView addSubview:self.inviteCodeBottomLineView];
         [self.inviteCodeBoxView addSubview:self.inviteCodeTextField];
@@ -355,8 +355,8 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
     if(!_inviteCodeTextField) {
         _inviteCodeTextField = [[UITextField alloc] initWithFrame:CGRectMake(20.0f, self.passwordBoxView.lim_height/2.0f - 20.0f, WKScreenWidth-20*2 - 32.0f, 40.0f)];
         
-        _inviteCodeTextField.hidden = !WKApp.shared.remoteConfig.registerInviteOn;
-        if(WKApp.shared.remoteConfig.registerInviteOn) {
+        _inviteCodeTextField.hidden = !WKApp.shared.remoteConfig.inviteCodeSystemOn;
+        if(WKApp.shared.remoteConfig.inviteCodeSystemOn) {
             [_inviteCodeTextField setPlaceholder:LLang(@"邀请码（必填）")];
         }else {
             [_inviteCodeTextField setPlaceholder:LLang(@"邀请码（选填）")];
@@ -382,7 +382,7 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
 - (UIButton *)registerBtn {
     if(!_registerBtn) {
         CGFloat top = self.passwordBoxView.lim_bottom;
-        if(WKApp.shared.remoteConfig.registerInviteOn) {
+        if(WKApp.shared.remoteConfig.inviteCodeSystemOn) {
             top = self.inviteCodeBoxView.lim_bottom;
         }
         _registerBtn = [[UIButton alloc] initWithFrame:CGRectMake(30.0f,top+82.0f, WKScreenWidth - 60.0f, 40.0f)];
@@ -537,6 +537,15 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
     if(![password isEqualToString:confirmPassword]) {
         [self.view showHUDWithHide:LLang(@"两次输入的密码不一致")];
         return;
+    }
+    // 邀请码必填校验：与 Android 行为保持一致；开关开启时，空/纯空白都拦在客户端。
+    if (WKApp.shared.remoteConfig.inviteCodeSystemOn) {
+        NSString *trimmedInviteCode = [inviteCode stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (!trimmedInviteCode || trimmedInviteCode.length == 0) {
+            [self.view showHUDWithHide:LLang(@"邀请码不能为空")];
+            return;
+        }
+        inviteCode = trimmedInviteCode;
     }
     [self.view showHUD:LLang(@"注册中")];
     __weak typeof(self) weakSelf = self;
