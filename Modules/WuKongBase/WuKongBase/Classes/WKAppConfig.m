@@ -499,8 +499,8 @@
             if(resultDict[@"revoke_second"]) {
                 weakSelf.revokeSecond = [resultDict[@"revoke_second"] integerValue];
             }
-            if(resultDict[@"invite_code_system_on"]) {
-                weakSelf.inviteCodeSystemOn = [resultDict[@"invite_code_system_on"] boolValue];
+            if(resultDict[@"register_invite_on"]) {
+                weakSelf.registerInviteOn = [resultDict[@"register_invite_on"] boolValue];
             }
             
             if(resultDict[@"invite_system_account_join_group_on"]) {

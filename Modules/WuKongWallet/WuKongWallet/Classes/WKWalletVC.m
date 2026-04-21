@@ -5,6 +5,7 @@
 #import "WKTransactionRecordVC.h"
 #import "WKWalletReceiveQRVC.h"
 #import "WKRechargeDepositSheetVC.h"
+#import "WKRechargeFullVC.h"
 #import "WKWithdrawVC.h"
 #import <WuKongBase/WKScanVC.h>
 
@@ -835,7 +836,8 @@ static UIColor *WKWalletUIColorRGB(unsigned rgb, CGFloat a) {
 }
 
 - (void)onRecharge {
-    [WKRechargeDepositSheetVC presentFromViewController:self];
+    WKRechargeFullVC *vc = [[WKRechargeFullVC alloc] init];
+    [self wkWalletPush:vc];
 }
 
 /// 与 Android {@code WalletActivity#onQuickBuyBannerClick} 一致：{@code WalletChatRouter.openOfficialCustomerService} → {@code show_customer_service}。

@@ -3,6 +3,8 @@
 #import "WKWalletAPI.h"
 #import "WKWalletChannelUtil.h"
 #import "WKWalletMaterialTheme.h"
+#import "WKWalletQrImageLoader.h"
+#import <Photos/Photos.h>
 
 @interface WKRechargeFullVC () <UITextFieldDelegate, UIGestureRecognizerDelegate>
 
@@ -27,7 +29,10 @@
 @property (nonatomic, strong) UILabel *uMethodChevron;
 @property (nonatomic, strong) UIView *uAddrCard;
 @property (nonatomic, strong) UILabel *uAddrTitle;
+@property (nonatomic, strong) UIImageView *uQrImageView;
 @property (nonatomic, strong) UILabel *uAddrLabel;
+@property (nonatomic, strong) UIControl *uSaveQrControl;
+@property (nonatomic, strong) UIControl *uCopyAddressControl;
 @property (nonatomic, strong) UIView *uAmtCard;
 @property (nonatomic, strong) UILabel *uAmtTitle;
 @property (nonatomic, strong) UILabel *uSym;
@@ -49,8 +54,12 @@
 @property (nonatomic, strong) UIView *wxDivider;
 
 @property (nonatomic, strong) UIButton *confirmBtn;
+@property (nonatomic, strong) UIButton *contactFab;
 @property (nonatomic, strong) UITapGestureRecognizer *dismissKeyboardTap;
 @property (nonatomic, strong) UIToolbar *numberInputToolbar;
+@property (nonatomic, copy) NSString *lastAddress;
+@property (nonatomic, strong) UIImage *lastQrImage;
+@property (nonatomic, assign) NSInteger qrGeneration;
 
 @end
 
@@ -64,6 +73,16 @@
     self.selectedUCoinIndex = 0;
     self.uCoinChannels = @[];
     self.wxAliChannels = @[];
+    self.lastAddress = @"";
+    UIButton *ordersBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    [ordersBtn setTitle:LLang(@"订单") forState:UIControlStateNormal];
+    ordersBtn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
+    [ordersBtn setTitleColor:[WKWalletMaterialTheme buyUsdtPrimary] forState:UIControlStateNormal];
+    [ordersBtn addTarget:self action:@selector(onTapOrders) forControlEvents:UIControlEventTouchUpInside];
+    [ordersBtn sizeToFit];
+    CGFloat ow = MAX(CGRectGetWidth(ordersBtn.bounds) + 20.0, 64.0);
+    ordersBtn.frame = CGRectMake(0, 0, ow, 44.0);
+    self.rightView = ordersBtn;
 
     self.scroll = [[UIScrollView alloc] init];
     self.scroll.alwaysBounceVertical = YES;
@@ -99,7 +118,7 @@
     CGFloat w = self.view.bounds.size.width;
     CGFloat h = self.view.bounds.size.height;
     CGFloat pad = 16;
-    CGFloat bottomInset = self.view.safeAreaInsets.bottom + 64;
+    CGFloat bottomInset = self.view.safeAreaInsets.bottom + 116;
     self.scroll.frame = CGRectMake(0, top, w, h - top);
 
     CGFloat y = 12;
@@ -134,10 +153,20 @@
             self.uMethodChevron.frame = CGRectMake(inner - 28, 16, 18, 20);
             by += 60;
         }
-        CGFloat addrH = [self textHeight:self.uAddrLabel.text width:inner - 28 font:self.uAddrLabel.font] + 36;
-        self.uAddrCard.frame = CGRectMake(pad, by, inner, MAX(addrH, 72));
+        CGFloat qrSide = 168.0f;
+        CGFloat addrH = [self textHeight:self.uAddrLabel.text width:inner - 28 font:self.uAddrLabel.font];
+        CGFloat addrBlockH = MAX(addrH, 36.0f);
+        CGFloat addrCardH = 12 + 16 + 10 + qrSide + 10 + addrBlockH + 10 + 44 + 12;
+        self.uAddrCard.frame = CGRectMake(pad, by, inner, addrCardH);
         self.uAddrTitle.frame = CGRectMake(14, 12, inner - 28, 16);
-        self.uAddrLabel.frame = CGRectMake(14, 32, inner - 28, MAX(addrH - 36, 36));
+        self.uQrImageView.frame = CGRectMake((inner - qrSide) / 2.0f, 38.0f, qrSide, qrSide);
+        self.uAddrLabel.frame = CGRectMake(14, CGRectGetMaxY(self.uQrImageView.frame) + 10, inner - 28, addrBlockH);
+        CGFloat btnY = CGRectGetMaxY(self.uAddrLabel.frame) + 10;
+        CGFloat btnW = (inner - 40) / 2.0f;
+        self.uSaveQrControl.frame = CGRectMake(14, btnY, btnW, 44);
+        self.uCopyAddressControl.frame = CGRectMake(14 + btnW + 12, btnY, btnW, 44);
+        [self layoutChip:self.uSaveQrControl];
+        [self layoutChip:self.uCopyAddressControl];
         by += CGRectGetHeight(self.uAddrCard.frame) + 8;
 
         self.uAmtCard.frame = CGRectMake(pad, by, inner, 120);
@@ -179,6 +208,11 @@
 
     self.scroll.contentSize = CGSizeMake(w, y + bottomInset);
     self.confirmBtn.frame = CGRectMake(pad, h - bottomInset + 8, inner, 48);
+    CGFloat safeBottom = self.view.safeAreaInsets.bottom;
+    [self.contactFab sizeToFit];
+    CGFloat fabW = MAX(CGRectGetWidth(self.contactFab.bounds) + 20.0f, 112.0f);
+    CGFloat fabH = 36.0f;
+    self.contactFab.frame = CGRectMake((w - fabW) / 2.0f, h - safeBottom - fabH - 12.0f, fabW, fabH);
 }
 
 - (CGFloat)textHeight:(NSString *)text width:(CGFloat)width font:(UIFont *)font {
@@ -266,11 +300,29 @@
     self.uAddrTitle.textColor = [WKWalletMaterialTheme rechargeTextSub];
     [self.uAddrCard addSubview:self.uAddrTitle];
 
+    self.uQrImageView = [[UIImageView alloc] init];
+    self.uQrImageView.contentMode = UIViewContentModeScaleAspectFit;
+    self.uQrImageView.backgroundColor = UIColor.whiteColor;
+    self.uQrImageView.layer.borderColor = [WKWalletMaterialTheme rechargeDivider].CGColor;
+    self.uQrImageView.layer.borderWidth = 0.5;
+    [self.uAddrCard addSubview:self.uQrImageView];
+
     self.uAddrLabel = [[UILabel alloc] init];
     self.uAddrLabel.numberOfLines = 0;
     self.uAddrLabel.font = [UIFont systemFontOfSize:14];
     self.uAddrLabel.textColor = [WKWalletMaterialTheme rechargeTextMain];
+    self.uAddrLabel.backgroundColor = [WKWalletMaterialTheme rechargePageBg];
+    self.uAddrLabel.layer.cornerRadius = 6;
+    self.uAddrLabel.layer.masksToBounds = YES;
     [self.uAddrCard addSubview:self.uAddrLabel];
+
+    self.uSaveQrControl = [self buildActionChipWithTitle:LLang(@"保存二维码") symbol:@"⬇"];
+    [self.uSaveQrControl addTarget:self action:@selector(onSaveQr) forControlEvents:UIControlEventTouchUpInside];
+    [self.uAddrCard addSubview:self.uSaveQrControl];
+
+    self.uCopyAddressControl = [self buildActionChipWithTitle:LLang(@"复制地址") symbol:@"⎘"];
+    [self.uCopyAddressControl addTarget:self action:@selector(onCopyAddress) forControlEvents:UIControlEventTouchUpInside];
+    [self.uAddrCard addSubview:self.uCopyAddressControl];
 
     self.uAmtCard = [[UIView alloc] init];
     [self styleMaterialCard:self.uAmtCard];
@@ -387,6 +439,18 @@
     self.confirmBtn.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
     [self.confirmBtn addTarget:self action:@selector(onConfirm) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.confirmBtn];
+
+    self.contactFab = [UIButton buttonWithType:UIButtonTypeCustom];
+    self.contactFab.layer.cornerRadius = 18.0f;
+    self.contactFab.layer.borderWidth = 1.0f;
+    self.contactFab.layer.borderColor = [WKWalletMaterialTheme buyUsdtCsFabStroke].CGColor;
+    self.contactFab.backgroundColor = [WKWalletMaterialTheme buyUsdtCsFabGlass];
+    [self.contactFab setTitle:LLang(@"联系客服") forState:UIControlStateNormal];
+    [self.contactFab setTitleColor:[WKWalletMaterialTheme buyUsdtCsFabText] forState:UIControlStateNormal];
+    self.contactFab.titleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
+    self.contactFab.contentEdgeInsets = UIEdgeInsetsMake(8, 16, 8, 16);
+    [self.contactFab addTarget:self action:@selector(onContactCs) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.contactFab];
 }
 
 - (void)showLoadingEmpty {
@@ -454,7 +518,7 @@
     if (hasU) {
         self.selectedUCoinIndex = MAX(0, MIN(self.selectedUCoinIndex, (NSInteger)self.uCoinChannels.count - 1));
         BOOL uMulti = self.uCoinChannels.count > 1;
-        self.uMethodCard.hidden = !uMulti;
+        self.uMethodCard.hidden = NO;
         self.uMethodChevron.hidden = !uMulti;
         self.uMethodBar.userInteractionEnabled = uMulti;
         [self updateUCoinAddressAndMethod];
@@ -491,7 +555,132 @@
     self.uMethodValue.text = ch ? [self formatChannelLine:ch] : @"";
     NSString *addr = ch ? [WKWalletChannelUtil channelDepositAddress:ch] : @"";
     self.uAddrTitle.text = LLang(@"收款地址（请仔细核对网络）");
-    self.uAddrLabel.text = addr.length ? addr : LLang(@"（暂无地址，请更换方式或联系客服）");
+    self.lastAddress = addr ?: @"";
+    self.uAddrLabel.text = self.lastAddress.length ? self.lastAddress : LLang(@"（暂无地址，请更换方式或联系客服）");
+    self.qrGeneration += 1;
+    NSInteger gen = self.qrGeneration;
+    self.uQrImageView.image = nil;
+    self.lastQrImage = nil;
+    NSString *qrRaw = ch ? [WKWalletChannelUtil channelQrImageURL:ch] : @"";
+    if (qrRaw.length > 0) {
+        __weak typeof(self) weakSelf = self;
+        [WKWalletQrImageLoader loadRechargeChannelQrImageWithRawString:qrRaw completion:^(UIImage *image) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (gen != weakSelf.qrGeneration) {
+                    return;
+                }
+                if (image) {
+                    weakSelf.lastQrImage = image;
+                    weakSelf.uQrImageView.image = image;
+                } else {
+                    weakSelf.lastQrImage = nil;
+                    weakSelf.uQrImageView.image = nil;
+                }
+            });
+        }];
+    } else if (self.lastAddress.length > 0) {
+        [self showGeneratedQr:gen address:self.lastAddress];
+    }
+}
+
+- (void)showGeneratedQr:(NSInteger)gen address:(NSString *)addr {
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        UIImage *img = [WKWalletQrImageLoader qrImageFromString:addr side:168.0f * UIScreen.mainScreen.scale];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (gen != self.qrGeneration) {
+                return;
+            }
+            self.lastQrImage = img;
+            self.uQrImageView.image = img;
+        });
+    });
+}
+
+- (UIControl *)buildActionChipWithTitle:(NSString *)title symbol:(NSString *)symbol {
+    UIControl *chip = [[UIControl alloc] init];
+    chip.backgroundColor = [WKWalletMaterialTheme rechargePageBg];
+    chip.layer.cornerRadius = 10.0f;
+    chip.layer.borderWidth = 0.5f;
+    chip.layer.borderColor = [WKWalletMaterialTheme rechargeDivider].CGColor;
+
+    UILabel *icon = [[UILabel alloc] init];
+    icon.text = symbol;
+    icon.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    icon.textColor = [WKWalletMaterialTheme rechargeTextMain];
+    [icon sizeToFit];
+    icon.frame = CGRectMake(0, 0, icon.bounds.size.width, icon.bounds.size.height);
+    [chip addSubview:icon];
+
+    UILabel *text = [[UILabel alloc] init];
+    text.text = title;
+    text.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    text.textColor = [WKWalletMaterialTheme rechargeTextMain];
+    [text sizeToFit];
+    text.frame = CGRectMake(0, 0, text.bounds.size.width, text.bounds.size.height);
+    [chip addSubview:text];
+
+    return chip;
+}
+
+- (void)layoutChip:(UIControl *)chip {
+    if (!chip || chip.subviews.count < 2) {
+        return;
+    }
+    UILabel *icon = [chip.subviews.firstObject isKindOfClass:[UILabel class]] ? (UILabel *)chip.subviews.firstObject : nil;
+    UILabel *text = [chip.subviews.lastObject isKindOfClass:[UILabel class]] ? (UILabel *)chip.subviews.lastObject : nil;
+    if (!icon || !text) {
+        return;
+    }
+    CGFloat totalW = icon.bounds.size.width + 4 + text.bounds.size.width;
+    CGFloat startX = MAX(0, (chip.bounds.size.width - totalW) / 2.0f);
+    icon.frame = CGRectMake(startX, (chip.bounds.size.height - icon.bounds.size.height) / 2.0f, icon.bounds.size.width, icon.bounds.size.height);
+    text.frame = CGRectMake(CGRectGetMaxX(icon.frame) + 4, (chip.bounds.size.height - text.bounds.size.height) / 2.0f, text.bounds.size.width, text.bounds.size.height);
+}
+
+- (void)onCopyAddress {
+    if (self.lastAddress.length == 0) {
+        [self alert:LLang(@"暂无地址")];
+        return;
+    }
+    UIPasteboard.generalPasteboard.string = self.lastAddress;
+    [self alert:LLang(@"已复制")];
+}
+
+- (void)onSaveQr {
+    if (!self.lastQrImage) {
+        [self alert:LLang(@"暂无可保存的二维码")];
+        return;
+    }
+    UIImage *img = self.lastQrImage;
+    void (^save)(void) = ^{
+        UIImageWriteToSavedPhotosAlbum(img, self, @selector(image:didFinishSavingWithError:contextInfo:), NULL);
+    };
+    void (^afterAuth)(PHAuthorizationStatus) = ^(PHAuthorizationStatus status) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (status == PHAuthorizationStatusAuthorized) {
+                save();
+            } else {
+                [self alert:LLang(@"请在设置中允许访问相册以保存图片")];
+            }
+        });
+    };
+    if (@available(iOS 14, *)) {
+        [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelAddOnly handler:afterAuth];
+    } else {
+        [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {
+            afterAuth(status);
+        }];
+    }
+}
+
+- (void)image:(UIImage *)image didFinishSavingWithError:(NSError *)error contextInfo:(void *)contextInfo {
+    (void)image;
+    (void)contextInfo;
+    if (error) {
+        [self alert:LLang(@"保存失败")];
+    } else {
+        [self alert:LLang(@"已保存到相册")];
+    }
 }
 
 - (void)updateWxMethodSummary {
@@ -659,6 +848,14 @@
     } else {
         [self alert:LLang(@"请输入金额")];
     }
+}
+
+- (void)onTapOrders {
+    [WKWalletBuyUsdtNavTransition pushOrderListOnNavigationController:self.navigationController];
+}
+
+- (void)onContactCs {
+    [[WKApp shared] invoke:@"show_customer_service" param:self];
 }
 
 - (void)submitAmountStr:(NSString *)amountStr channel:(NSDictionary *)ch {

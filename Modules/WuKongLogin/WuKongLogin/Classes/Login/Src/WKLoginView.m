@@ -72,12 +72,113 @@
     [self addSubview:self.loginBtn];
     [self addSubview:self.registerTipLbl];
     [self addSubview:self.registerBtn];
+    [self setupConstraints];
     self.mobileTextField.inputAccessoryView = self.numberInputToolbar;
     [self setupDismissKeyboardGesture];
     
     
     
     return self;
+}
+
+- (void)dealloc {
+    [self unregisterKeyboardNotifications];
+}
+
+- (void)didMoveToWindow {
+    [super didMoveToWindow];
+    if (self.window) {
+        [self registerKeyboardNotifications];
+    } else {
+        [self unregisterKeyboardNotifications];
+        self.transform = CGAffineTransformIdentity;
+    }
+}
+
+- (void)setupConstraints {
+    [self.bgImgView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(self);
+    }];
+    [self.welcomeTitleLbl mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.mas_safeAreaLayoutGuideTop).offset(20.0f);
+        make.left.equalTo(self).offset(30.0f);
+        make.right.equalTo(self).offset(-30.0f);
+        make.height.mas_equalTo(50.0f);
+    }];
+    [self.mobileBoxView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.welcomeTitleLbl.mas_bottom).offset(44.0f);
+        make.left.right.equalTo(self);
+        make.height.mas_equalTo(40.0f);
+    }];
+    [self.countryBtn mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.mobileBoxView);
+        make.centerY.equalTo(self.mobileBoxView);
+        make.width.mas_equalTo(70.0f);
+        make.height.mas_equalTo(20.0f);
+    }];
+    [self.downArrowView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.centerY.equalTo(self.mobileBoxView);
+        make.right.equalTo(self.countryBtn.mas_right);
+        make.width.height.mas_equalTo(12.0f);
+    }];
+    [self.countrySpliteLineView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.countryBtn.mas_right).offset(10.0f);
+        make.centerY.equalTo(self.mobileBoxView);
+        make.width.mas_equalTo(1.0f);
+        make.height.mas_equalTo(10.0f);
+    }];
+    [self.mobileTextField mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.countrySpliteLineView.mas_right).offset(20.0f);
+        make.right.equalTo(self.mobileBoxView).offset(-20.0f);
+        make.top.bottom.equalTo(self.mobileBoxView);
+    }];
+    [self.mobileBottomLineView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.mobileBoxView).offset(20.0f);
+        make.right.equalTo(self.mobileBoxView).offset(-20.0f);
+        make.bottom.equalTo(self.mobileBoxView);
+        make.height.mas_equalTo(1.0f);
+    }];
+
+    [self.passwordBoxView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.mobileBoxView.mas_bottom).offset(20.0f);
+        make.left.right.equalTo(self);
+        make.height.mas_equalTo(40.0f);
+    }];
+    [self.passwordTextField mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.passwordBoxView).offset(20.0f);
+        make.top.bottom.equalTo(self.passwordBoxView);
+        make.right.equalTo(self.eyeBtn.mas_left);
+    }];
+    [self.eyeBtn mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.right.equalTo(self.passwordBoxView).offset(-20.0f);
+        make.centerY.equalTo(self.passwordBoxView);
+        make.width.height.mas_equalTo(32.0f);
+    }];
+    [self.passwordBottomLineView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.passwordBoxView).offset(20.0f);
+        make.right.equalTo(self.passwordBoxView).offset(-20.0f);
+        make.bottom.equalTo(self.passwordBoxView);
+        make.height.mas_equalTo(1.0f);
+    }];
+
+    [self.forgetPwdBtn mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self).offset(20.0f);
+        make.top.equalTo(self.passwordBoxView.mas_bottom).offset(15.0f);
+    }];
+    [self.loginBtn mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.passwordBoxView.mas_bottom).offset(72.0f);
+        make.left.equalTo(self).offset(30.0f);
+        make.right.equalTo(self).offset(-30.0f);
+        make.height.mas_equalTo(40.0f);
+    }];
+    [self.registerTipLbl mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.loginBtn.mas_bottom).offset(25.0f);
+        make.centerX.equalTo(self).offset(-20.0f);
+    }];
+    [self.registerBtn mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.registerTipLbl.mas_right);
+        make.centerY.equalTo(self.registerTipLbl);
+    }];
 }
 
 - (void)setupDismissKeyboardGesture {
@@ -89,6 +190,54 @@
 
 - (void)onTapDismissKeyboard {
     [self endEditing:YES];
+}
+
+- (void)registerKeyboardNotifications {
+    NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+    [center addObserver:self selector:@selector(onKeyboardWillChangeFrame:) name:UIKeyboardWillChangeFrameNotification object:nil];
+    [center addObserver:self selector:@selector(onKeyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
+}
+
+- (void)unregisterKeyboardNotifications {
+    [NSNotificationCenter.defaultCenter removeObserver:self name:UIKeyboardWillChangeFrameNotification object:nil];
+    [NSNotificationCenter.defaultCenter removeObserver:self name:UIKeyboardWillHideNotification object:nil];
+}
+
+- (UITextField *)activeInputField {
+    if (self.mobileTextField.isFirstResponder) {
+        return self.mobileTextField;
+    }
+    if (self.passwordTextField.isFirstResponder) {
+        return self.passwordTextField;
+    }
+    return nil;
+}
+
+- (void)onKeyboardWillChangeFrame:(NSNotification *)notification {
+    UITextField *activeField = [self activeInputField];
+    if (!activeField) {
+        return;
+    }
+    NSDictionary *userInfo = notification.userInfo;
+    NSTimeInterval duration = [userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+    UIViewAnimationCurve curve = [userInfo[UIKeyboardAnimationCurveUserInfoKey] integerValue];
+    CGRect keyboardFrameScreen = [userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+    CGRect keyboardFrame = [self convertRect:keyboardFrameScreen fromView:nil];
+    CGRect inputFrame = [activeField.superview convertRect:activeField.frame toView:self];
+    CGFloat overlap = CGRectGetMaxY(inputFrame) + 16.0f - CGRectGetMinY(keyboardFrame);
+    CGFloat offset = MAX(0.0f, overlap);
+    [UIView animateWithDuration:duration delay:0 options:(curve << 16) | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        self.transform = CGAffineTransformMakeTranslation(0.0f, -offset);
+    } completion:nil];
+}
+
+- (void)onKeyboardWillHide:(NSNotification *)notification {
+    NSDictionary *userInfo = notification.userInfo;
+    NSTimeInterval duration = [userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+    UIViewAnimationCurve curve = [userInfo[UIKeyboardAnimationCurveUserInfoKey] integerValue];
+    [UIView animateWithDuration:duration delay:0 options:(curve << 16) | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        self.transform = CGAffineTransformIdentity;
+    } completion:nil];
 }
 
 - (UIToolbar *)numberInputToolbar {

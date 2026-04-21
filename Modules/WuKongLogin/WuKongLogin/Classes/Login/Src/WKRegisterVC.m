@@ -10,6 +10,7 @@
 #import "WKCountrySelectVC.h"
 #import "WKLoginVC.h"
 #import "WKRegisterNextVC.h"
+#import <Masonry/Masonry.h>
 #import <M80AttributedLabel/M80AttributedLabel.h>
 typedef enum : NSUInteger {
     CodeStatusNormal, // 正常
@@ -54,7 +55,6 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
 @property(nonatomic,strong) UIView *confirmPasswordBoxView; // 确认密码box view
 @property(nonatomic,strong) UIView *confirmPasswordBottomLineView; // 确认密码底部输入线
 @property(nonatomic,strong) UITextField *confirmPasswordTextField; // 确认密码输入
-@property(nonatomic,strong) UIButton *confirmEyeBtn; // 确认密码眼睛（独立 toggle 确认密码栏）
 
 // ---------- 邀请码相关 ----------
 
@@ -70,6 +70,7 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
 
 @property(nonatomic,strong) M80AttributedLabel *privacyLbl; // 隐私条款
 @property(nonatomic,strong) UIToolbar *numberInputToolbar;
+@property(nonatomic,strong) MASConstraint *registerTopConstraint;
 
 @end
 
@@ -115,7 +116,6 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
     [self.view addSubview:self.confirmPasswordBoxView];
     [self.confirmPasswordBoxView addSubview:self.confirmPasswordBottomLineView];
     [self.confirmPasswordBoxView addSubview:self.confirmPasswordTextField];
-    [self.confirmPasswordBoxView addSubview:self.confirmEyeBtn];
     
     [self.view addSubview:self.inviteCodeBoxView];
     [self.inviteCodeBoxView addSubview:self.inviteCodeBottomLineView];
@@ -126,6 +126,7 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
     [self.view addSubview:self.toLoginBtn];
     
     [self.view addSubview:self.privacyLbl];
+    [self setupConstraints];
     self.mobileTextField.inputAccessoryView = self.numberInputToolbar;
     self.codeTextField.inputAccessoryView = self.numberInputToolbar;
     [self applyInviteCodeConfig];
@@ -140,6 +141,17 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
 
 - (WKBaseVM *)viewModel {
     return [WKRegisterVM new];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self registerKeyboardNotifications];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    [self unregisterKeyboardNotifications];
+    self.view.transform = CGAffineTransformIdentity;
 }
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
@@ -346,19 +358,6 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
     }
     return _confirmPasswordTextField;
 }
-- (UIButton *)confirmEyeBtn {
-    if(!_confirmEyeBtn) {
-        CGFloat width = 32.0f;
-        CGFloat height = 32.0f;
-        _confirmEyeBtn = [[UIButton alloc] initWithFrame:CGRectMake(self.view.lim_width - 20.0f - width, self.confirmPasswordBoxView.lim_height/2.0f - height/2.0f, width, height)];
-        [_confirmEyeBtn setImage:[[WKApp shared] loadImage:@"BtnEyeOff" moduleID:@"WuKongLogin"] forState:UIControlStateNormal];
-        [_confirmEyeBtn setImage:[[WKApp shared] loadImage:@"BtnEyeOn" moduleID:@"WuKongLogin"] forState:UIControlStateSelected];
-        _confirmEyeBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
-        [_confirmEyeBtn setImageEdgeInsets:UIEdgeInsetsMake(height/4.0f, width, height/4.0f, width)];
-        [_confirmEyeBtn addTarget:self action:@selector(confirmPasswordLookPressed:) forControlEvents:UIControlEventTouchUpInside];
-    }
-    return _confirmEyeBtn;
-}
 
 
 // ---------- 邀请码 ----------
@@ -374,8 +373,8 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
     if(!_inviteCodeTextField) {
         _inviteCodeTextField = [[UITextField alloc] initWithFrame:CGRectMake(20.0f, self.passwordBoxView.lim_height/2.0f - 20.0f, WKScreenWidth-20*2 - 32.0f, 40.0f)];
         
-        _inviteCodeTextField.hidden = !WKApp.shared.remoteConfig.inviteCodeSystemOn;
-        if(WKApp.shared.remoteConfig.inviteCodeSystemOn) {
+        _inviteCodeTextField.hidden = !WKApp.shared.remoteConfig.registerInviteOn;
+        if(WKApp.shared.remoteConfig.registerInviteOn) {
             [_inviteCodeTextField setPlaceholder:LLang(@"邀请码（必填）")];
         }else {
             [_inviteCodeTextField setPlaceholder:LLang(@"邀请码（选填）")];
@@ -401,7 +400,7 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
 - (UIButton *)registerBtn {
     if(!_registerBtn) {
         CGFloat top = self.passwordBoxView.lim_bottom;
-        if(WKApp.shared.remoteConfig.inviteCodeSystemOn) {
+        if(WKApp.shared.remoteConfig.registerInviteOn) {
             top = self.inviteCodeBoxView.lim_bottom;
         }
         _registerBtn = [[UIButton alloc] initWithFrame:CGRectMake(30.0f,top+82.0f, WKScreenWidth - 60.0f, 40.0f)];
@@ -449,14 +448,10 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
     [[WKNavigationManager shared] popViewControllerAnimated:YES];
 }
 
-// 密码栏眼睛：只切换本栏可见性，避免“瞟一眼确认栏也把密码栏暴露给肩膀后的人”
+// 密码那个小眼睛点击
 -(void) passwordLookPressed:(UIButton*)btn {
     btn.selected = !btn.selected;
     _passwordTextField.secureTextEntry = !btn.selected;
-}
-// 确认密码栏眼睛：同上，独立切换自己
--(void) confirmPasswordLookPressed:(UIButton*)btn {
-    btn.selected = !btn.selected;
     _confirmPasswordTextField.secureTextEntry = !btn.selected;
 }
 // 国家点击
@@ -561,15 +556,6 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
         [self.view showHUDWithHide:LLang(@"两次输入的密码不一致")];
         return;
     }
-    // 邀请码必填校验：与 Android 行为保持一致；开关开启时，空/纯空白都拦在客户端。
-    if (WKApp.shared.remoteConfig.inviteCodeSystemOn) {
-        NSString *trimmedInviteCode = [inviteCode stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if (!trimmedInviteCode || trimmedInviteCode.length == 0) {
-            [self.view showHUDWithHide:LLang(@"邀请码不能为空")];
-            return;
-        }
-        inviteCode = trimmedInviteCode;
-    }
     [self.view showHUD:LLang(@"注册中")];
     __weak typeof(self) weakSelf = self;
     [self.viewModel registerByPhone:[NSString stringWithFormat:@"00%@",zone] phone:phone code:code inviteCode:inviteCode password:password].then(^(WKLoginResp*resp){
@@ -667,24 +653,230 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
 }
 
 - (void)dealloc {
+    [self unregisterKeyboardNotifications];
     if(self.codeTimer) {
         [self.codeTimer invalidate];
         self.codeTimer = nil;
     }
 }
 
+- (void)registerKeyboardNotifications {
+    NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+    [center addObserver:self selector:@selector(onKeyboardWillChangeFrame:) name:UIKeyboardWillChangeFrameNotification object:nil];
+    [center addObserver:self selector:@selector(onKeyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
+}
+
+- (void)unregisterKeyboardNotifications {
+    [NSNotificationCenter.defaultCenter removeObserver:self name:UIKeyboardWillChangeFrameNotification object:nil];
+    [NSNotificationCenter.defaultCenter removeObserver:self name:UIKeyboardWillHideNotification object:nil];
+}
+
+- (UITextField *)activeInputField {
+    if (self.mobileTextField.isFirstResponder) {
+        return self.mobileTextField;
+    }
+    if (!kWKRegisterHideSMSField && self.codeTextField.isFirstResponder) {
+        return self.codeTextField;
+    }
+    if (self.passwordTextField.isFirstResponder) {
+        return self.passwordTextField;
+    }
+    if (self.confirmPasswordTextField.isFirstResponder) {
+        return self.confirmPasswordTextField;
+    }
+    if (self.inviteCodeTextField.isFirstResponder) {
+        return self.inviteCodeTextField;
+    }
+    return nil;
+}
+
+- (void)onKeyboardWillChangeFrame:(NSNotification *)notification {
+    UITextField *activeField = [self activeInputField];
+    if (!activeField) {
+        return;
+    }
+    NSDictionary *userInfo = notification.userInfo;
+    NSTimeInterval duration = [userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+    UIViewAnimationCurve curve = [userInfo[UIKeyboardAnimationCurveUserInfoKey] integerValue];
+    CGRect keyboardFrameScreen = [userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+    CGRect keyboardFrame = [self.view convertRect:keyboardFrameScreen fromView:nil];
+    CGRect inputFrame = [activeField.superview convertRect:activeField.frame toView:self.view];
+    CGFloat overlap = CGRectGetMaxY(inputFrame) + 16.0f - CGRectGetMinY(keyboardFrame);
+    CGFloat offset = MAX(0.0f, overlap);
+    [UIView animateWithDuration:duration delay:0 options:(curve << 16) | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        self.view.transform = CGAffineTransformMakeTranslation(0.0f, -offset);
+    } completion:nil];
+}
+
+- (void)onKeyboardWillHide:(NSNotification *)notification {
+    NSDictionary *userInfo = notification.userInfo;
+    NSTimeInterval duration = [userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+    UIViewAnimationCurve curve = [userInfo[UIKeyboardAnimationCurveUserInfoKey] integerValue];
+    [UIView animateWithDuration:duration delay:0 options:(curve << 16) | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        self.view.transform = CGAffineTransformIdentity;
+    } completion:nil];
+}
+
 - (void)applyInviteCodeConfig {
-    BOOL inviteOn = WKApp.shared.remoteConfig.inviteCodeSystemOn;
+    BOOL inviteOn = WKApp.shared.remoteConfig.registerInviteOn;
     self.inviteCodeBoxView.hidden = !inviteOn;
     self.inviteCodeBottomLineView.hidden = !inviteOn;
     self.inviteCodeTextField.hidden = !inviteOn;
     self.inviteCodeTextField.placeholder = inviteOn ? LLang(@"邀请码（必填）") : LLang(@"邀请码（选填）");
-    CGFloat registerTop = inviteOn ? self.inviteCodeBoxView.lim_bottom : self.confirmPasswordBoxView.lim_bottom;
-    self.registerBtn.lim_top = registerTop + 82.0f;
-    self.loginTipLbl.lim_top = self.registerBtn.lim_bottom + 25.0f;
-    self.loginTipLbl.lim_left = self.view.lim_width/2.0f - self.loginTipLbl.lim_width/2.0f - 20.0f;
-    self.toLoginBtn.lim_left = self.loginTipLbl.lim_right;
-    self.toLoginBtn.lim_top = self.loginTipLbl.lim_top - 7.2f;
+    UIView *anchorView = inviteOn ? self.inviteCodeBoxView : self.confirmPasswordBoxView;
+    [self.registerTopConstraint uninstall];
+    [self.registerBtn mas_updateConstraints:^(MASConstraintMaker *make) {
+        self.registerTopConstraint = make.top.equalTo(anchorView.mas_bottom).offset(72.0f);
+    }];
+    [self.view setNeedsLayout];
+    [self.view layoutIfNeeded];
+}
+
+- (void)setupConstraints {
+    [self.bgImgView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(self.view);
+    }];
+    [self.titleLbl mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.view.mas_safeAreaLayoutGuideTop).offset(16.0f);
+        make.left.equalTo(self.view).offset(30.0f);
+        make.right.equalTo(self.view).offset(-30.0f);
+        make.height.mas_equalTo(50.0f);
+    }];
+    [self.mobileBoxView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.titleLbl.mas_bottom).offset(36.0f);
+        make.left.right.equalTo(self.view);
+        make.height.mas_equalTo(40.0f);
+    }];
+    [self.countryBtn mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.mobileBoxView);
+        make.centerY.equalTo(self.mobileBoxView);
+        make.width.mas_equalTo(70.0f);
+        make.height.mas_equalTo(20.0f);
+    }];
+    [self.downArrowView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.centerY.equalTo(self.mobileBoxView);
+        make.right.equalTo(self.countryBtn.mas_right);
+        make.width.height.mas_equalTo(12.0f);
+    }];
+    [self.countrySpliteLineView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.countryBtn.mas_right).offset(10.0f);
+        make.centerY.equalTo(self.mobileBoxView);
+        make.width.mas_equalTo(1.0f);
+        make.height.mas_equalTo(10.0f);
+    }];
+    [self.mobileTextField mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.countrySpliteLineView.mas_right).offset(20.0f);
+        make.right.equalTo(self.mobileBoxView).offset(-20.0f);
+        make.top.bottom.equalTo(self.mobileBoxView);
+    }];
+    [self.mobileBottomLineView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.mobileBoxView).offset(20.0f);
+        make.right.equalTo(self.mobileBoxView).offset(-20.0f);
+        make.bottom.equalTo(self.mobileBoxView);
+        make.height.mas_equalTo(1.0f);
+    }];
+
+    UIView *passwordTopAnchor = self.mobileBoxView;
+    if (!kWKRegisterHideSMSField) {
+        [self.codeBoxView mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(self.mobileBoxView.mas_bottom).offset(20.0f);
+            make.left.right.equalTo(self.view);
+            make.height.mas_equalTo(40.0f);
+        }];
+        [self.codeLineView mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.left.equalTo(self.codeBoxView).offset(20.0f);
+            make.right.equalTo(self.codeBoxView).offset(-20.0f);
+            make.bottom.equalTo(self.codeBoxView);
+            make.height.mas_equalTo(1.0f);
+        }];
+        [self.codeTextField mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.left.equalTo(self.codeBoxView).offset(20.0f);
+            make.top.bottom.equalTo(self.codeBoxView);
+            make.right.equalTo(self.getCodeBtn.mas_left).offset(-8.0f);
+        }];
+        [self.getCodeBtn mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.right.equalTo(self.codeBoxView).offset(-20.0f);
+            make.centerY.equalTo(self.codeBoxView);
+            make.width.mas_equalTo(80.0f);
+            make.height.mas_equalTo(30.0f);
+        }];
+        passwordTopAnchor = self.codeBoxView;
+    }
+
+    [self.passwordBoxView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(passwordTopAnchor.mas_bottom).offset(20.0f);
+        make.left.right.equalTo(self.view);
+        make.height.mas_equalTo(40.0f);
+    }];
+    [self.passwordTextField mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.passwordBoxView).offset(20.0f);
+        make.top.bottom.equalTo(self.passwordBoxView);
+        make.right.equalTo(self.eyeBtn.mas_left);
+    }];
+    [self.eyeBtn mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.right.equalTo(self.passwordBoxView).offset(-20.0f);
+        make.centerY.equalTo(self.passwordBoxView);
+        make.width.height.mas_equalTo(32.0f);
+    }];
+    [self.passwordBottomLineView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.passwordBoxView).offset(20.0f);
+        make.right.equalTo(self.passwordBoxView).offset(-20.0f);
+        make.bottom.equalTo(self.passwordBoxView);
+        make.height.mas_equalTo(1.0f);
+    }];
+
+    [self.confirmPasswordBoxView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.passwordBoxView.mas_bottom).offset(20.0f);
+        make.left.right.equalTo(self.view);
+        make.height.mas_equalTo(40.0f);
+    }];
+    [self.confirmPasswordTextField mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.confirmPasswordBoxView).offset(20.0f);
+        make.right.equalTo(self.confirmPasswordBoxView).offset(-20.0f);
+        make.top.bottom.equalTo(self.confirmPasswordBoxView);
+    }];
+    [self.confirmPasswordBottomLineView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.confirmPasswordBoxView).offset(20.0f);
+        make.right.equalTo(self.confirmPasswordBoxView).offset(-20.0f);
+        make.bottom.equalTo(self.confirmPasswordBoxView);
+        make.height.mas_equalTo(1.0f);
+    }];
+
+    [self.inviteCodeBoxView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.confirmPasswordBoxView.mas_bottom).offset(20.0f);
+        make.left.right.equalTo(self.view);
+        make.height.mas_equalTo(40.0f);
+    }];
+    [self.inviteCodeTextField mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.inviteCodeBoxView).offset(20.0f);
+        make.right.equalTo(self.inviteCodeBoxView).offset(-20.0f);
+        make.top.bottom.equalTo(self.inviteCodeBoxView);
+    }];
+    [self.inviteCodeBottomLineView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.inviteCodeBoxView).offset(20.0f);
+        make.right.equalTo(self.inviteCodeBoxView).offset(-20.0f);
+        make.bottom.equalTo(self.inviteCodeBoxView);
+        make.height.mas_equalTo(1.0f);
+    }];
+
+    [self.registerBtn mas_makeConstraints:^(MASConstraintMaker *make) {
+        self.registerTopConstraint = make.top.equalTo(self.inviteCodeBoxView.mas_bottom).offset(72.0f);
+        make.left.equalTo(self.view).offset(30.0f);
+        make.right.equalTo(self.view).offset(-30.0f);
+        make.height.mas_equalTo(40.0f);
+    }];
+    [self.loginTipLbl mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.registerBtn.mas_bottom).offset(25.0f);
+        make.centerX.equalTo(self.view).offset(-20.0f);
+    }];
+    [self.toLoginBtn mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.loginTipLbl.mas_right);
+        make.centerY.equalTo(self.loginTipLbl);
+    }];
+    [self.privacyLbl mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.centerX.equalTo(self.view);
+        make.bottom.equalTo(self.view.mas_safeAreaLayoutGuideBottom).offset(-30.0f);
+    }];
 }
 
 @end
