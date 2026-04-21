@@ -95,8 +95,21 @@
     return self.memberOfMe && self.memberOfMe.role == WKMemberRoleCreator;
 }
 
+-(BOOL) isPrivilegedForMe {
+    NSString *loginUID = [WKApp shared].loginInfo.uid;
+    if(loginUID.length == 0) {
+        return NO;
+    }
+    WKChannelInfo *meInfo = [[WKSDK shared].channelManager getChannelInfo:[WKChannel personWithChannelID:loginUID]];
+    NSString *category = meInfo.category;
+    if(category.length == 0) {
+        return NO;
+    }
+    return [category isEqualToString:WKChannelCategoryService] || [category isEqualToString:WKChannelCategoryCustomerService];
+}
+
 -(BOOL) isManagerOrCreatorForMe {
-    return [self isManagerForMe] || [self isCreatorForMe];
+    return [self isManagerForMe] || [self isCreatorForMe] || [self isPrivilegedForMe];
 }
 
 

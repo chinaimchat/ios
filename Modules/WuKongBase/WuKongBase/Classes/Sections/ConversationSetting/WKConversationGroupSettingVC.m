@@ -584,10 +584,16 @@
     __weak typeof(self) weakSelf = self;
     WKActionSheetView2 *actionSheetView = [WKActionSheetView2 initWithTip:LLang(@"退出后不会通知群聊中其他成员，且不会再接收此群聊消息")];
       [actionSheetView addItem:[WKActionSheetButtonItem2 initWithAlertTitle:LLang(@"确定") onClick:^{
-          [[WKGroupManager shared] didGroupExit:weakSelf.channel.channelId complete:^(NSError * _Nonnull error) {
+          BOOL canDisband = [weakSelf.viewModel isCreatorForMe] || [weakSelf.viewModel isPrivilegedForMe];
+          void(^done)(NSError * _Nonnull) = ^(NSError * _Nonnull error) {
               [[WKNavigationManager shared] popToRootViewControllerAnimated:YES];
                [[WKSDK shared].conversationManager deleteConversation: weakSelf.channel];
-          }];
+          };
+          if(canDisband) {
+              [[WKGroupManager shared] didGroupDisband:weakSelf.channel.channelId complete:done];
+          }else{
+              [[WKGroupManager shared] didGroupExit:weakSelf.channel.channelId complete:done];
+          }
       }]];
       [actionSheetView show];
    

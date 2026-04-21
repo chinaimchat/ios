@@ -135,6 +135,9 @@ NS_ASSUME_NONNULL_BEGIN
  */
 -(BOOL) isCreatorForMe;
 
+/// 我是否是特权号（system/customerService）
+-(BOOL) isPrivilegedForMe;
+
 
 /**
  我是否是群创建者或管理员

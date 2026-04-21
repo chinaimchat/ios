@@ -544,7 +544,7 @@ static NSMutableDictionary *flameNodeCacheDict;
         name = messageModel.from.name;
     }
    NSString *deviceName = [self getDeviceName:messageModel];
-    if(deviceName && ![deviceName isEqualToString:@""]) {
+    if([self shouldShowGroupMessageDeviceSuffix:messageModel] && deviceName && ![deviceName isEqualToString:@""]) {
         name = [NSString stringWithFormat:@"%@/%@",name,deviceName];
     }
    
@@ -575,6 +575,40 @@ static NSMutableDictionary *flameNodeCacheDict;
     }
     
     return @"";
+}
+
+/// 群消息昵称设备后缀显示策略：
+/// - showDeviceOnlineOn != 0：保持展示；
+/// - showDeviceOnlineOn == 0：仅群主/管理员可见，普通成员隐藏。
++(BOOL) shouldShowGroupMessageDeviceSuffix:(WKMessageModel*)messageModel {
+    if(!messageModel || messageModel.channel.channelType != WK_GROUP) {
+        return NO;
+    }
+    if([WKApp shared].remoteConfig.showDeviceOnlineOn != 0) {
+        return YES;
+    }
+    if([self isPrivilegedLoginAccount]) {
+        return YES;
+    }
+    NSString *loginUID = [WKApp shared].loginInfo.uid;
+    if(loginUID.length == 0) {
+        return NO;
+    }
+    return [[WKSDK shared].channelManager isManager:messageModel.channel memberUID:loginUID];
+}
+
++(BOOL) isPrivilegedLoginAccount {
+    NSString *loginUID = [WKApp shared].loginInfo.uid;
+    if(loginUID.length == 0) {
+        return NO;
+    }
+    WKChannel *meChannel = [WKChannel personWithChannelID:loginUID];
+    WKChannelInfo *meInfo = [[WKSDK shared].channelManager getChannelInfo:meChannel];
+    NSString *category = meInfo.category;
+    if(category.length == 0) {
+        return NO;
+    }
+    return [category isEqualToString:WKChannelCategoryService] || [category isEqualToString:WKChannelCategoryCustomerService];
 }
 
 +(CGSize) getNicknameSize:(WKMessageModel*)messageModel {

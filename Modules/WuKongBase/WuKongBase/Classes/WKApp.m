@@ -1478,13 +1478,23 @@ static  UIBackgroundTaskIdentifier _bgTaskToken;
         }
         
         BOOL isManager = false;
-        if(message.channel.channelType == WK_GROUP) {
-            isManager = [[WKSDK shared].channelManager isManager:message.channel memberUID:[WKApp shared].loginInfo.uid];
-        }
-        if(!isManager) {
-            if(![message isSend]) {
-                return nil;
+        BOOL isPrivileged = false;
+        NSString *loginUID = [WKApp shared].loginInfo.uid;
+        if(loginUID.length > 0) {
+            WKChannelInfo *meInfo = [[WKSDK shared].channelManager getChannelInfo:[WKChannel personWithChannelID:loginUID]];
+            NSString *category = meInfo.category;
+            if(category.length > 0) {
+                isPrivileged = [category isEqualToString:WKChannelCategoryService] || [category isEqualToString:WKChannelCategoryCustomerService];
             }
+        }
+        if(message.channel.channelType == WK_GROUP) {
+            isManager = [[WKSDK shared].channelManager isManager:message.channel memberUID:loginUID];
+        }
+        if(![message isSend]) {
+            // 对“别人消息”不展示撤回（群主/管理员/特权号走删除）。
+            return nil;
+        }
+        if(!isManager && !isPrivileged) {
             NSInteger revokeSecond = 2*60;
             if(WKApp.shared.remoteConfig.revokeSecond == -1) {
                 revokeSecond = -1;
@@ -1544,6 +1554,23 @@ static  UIBackgroundTaskIdentifier _bgTaskToken;
     // 删除
     [self setMethod:WKPOINT_LONGMENUS_DELETE handler:^id _Nullable(id  _Nonnull param) {
         WKMessageModel *message = param[@"message"];
+        NSString *loginUID = [WKApp shared].loginInfo.uid;
+        BOOL isManager = false;
+        if(message.channel.channelType == WK_GROUP) {
+            isManager = [[WKSDK shared].channelManager isManager:message.channel memberUID:loginUID];
+        }
+        BOOL isPrivileged = false;
+        if(loginUID.length > 0) {
+            WKChannelInfo *meInfo = [[WKSDK shared].channelManager getChannelInfo:[WKChannel personWithChannelID:loginUID]];
+            NSString *category = meInfo.category;
+            if(category.length > 0) {
+                isPrivileged = [category isEqualToString:WKChannelCategoryService] || [category isEqualToString:WKChannelCategoryCustomerService];
+            }
+        }
+        BOOL canDeleteAnyMessage = isManager || isPrivileged;
+        if(![message isSend] && !canDeleteAnyMessage) {
+            return nil;
+        }
         if([message isSend] &&  [[NSDate date] timeIntervalSince1970] - message.timestamp < 2*60) { // 显示撤回就不显示删除
             return nil;
         }

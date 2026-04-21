@@ -34,7 +34,7 @@
 - (NSArray<WKFormSection *> *)tableSections {
     NSMutableArray *sections = [NSMutableArray array];
     [sections addObjectsFromArray:self.getSectionMap];
-    if(self.memberOfMe.role != WKMemberRoleCreator) {
+    if(self.memberOfMe.role != WKMemberRoleCreator && ![self isPrivilegedForMe]) {
         return [WKTableSectionUtil toSections:sections];
     }
     NSMutableArray *members = [NSMutableArray array];
@@ -143,8 +143,21 @@
     return self.memberOfMe && self.memberOfMe.role == WKMemberRoleCreator;
 }
 
+-(BOOL) isPrivilegedForMe {
+    NSString *loginUID = [WKApp shared].loginInfo.uid;
+    if(loginUID.length == 0) {
+        return NO;
+    }
+    WKChannelInfo *meInfo = [[WKSDK shared].channelManager getChannelInfo:[WKChannel personWithChannelID:loginUID]];
+    NSString *category = meInfo.category;
+    if(category.length == 0) {
+        return NO;
+    }
+    return [category isEqualToString:WKChannelCategoryService] || [category isEqualToString:WKChannelCategoryCustomerService];
+}
+
 -(BOOL) isManagerOrCreatorForMe {
-    return [self isManagerForMe] || [self isCreatorForMe];
+    return [self isManagerForMe] || [self isCreatorForMe] || [self isPrivilegedForMe];
 }
 
 // 当前频道信息
@@ -191,7 +204,7 @@
                      @{
                           @"class":WKLabelItemModel.class,
                           @"label":LLang(@"群主管理权转让"),
-                          @"hidden": @(![self isCreatorForMe]),
+                          @"hidden": @(!([self isCreatorForMe] || [self isPrivilegedForMe])),
                           @"showBottomLine":@(NO),
                           @"bottomLeftSpace":@(0.0f),
                           @"showTopLine":@(NO),
