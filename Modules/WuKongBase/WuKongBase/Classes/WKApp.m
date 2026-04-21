@@ -209,6 +209,71 @@ static NSString *WKImTcpAddrFromAPIPayload(id payload) {
     return addr.length ? addr : nil;
 }
 
+static BOOL WKIsPrivilegedLoginAccount() {
+    NSString *loginUID = [WKApp shared].loginInfo.uid;
+    if (loginUID.length == 0) {
+        return NO;
+    }
+    if ([loginUID isEqualToString:[WKApp shared].config.systemUID] || [loginUID isEqualToString:[WKApp shared].config.fileHelperUID]) {
+        return YES;
+    }
+    WKChannelInfo *meInfo = [[WKSDK shared].channelManager getChannelInfo:[WKChannel personWithChannelID:loginUID]];
+    NSString *category = meInfo.category;
+    if (category.length == 0) {
+        id cachedCategory = [WKApp shared].loginInfo.extra[@"category"];
+        if ([cachedCategory isKindOfClass:[NSString class]]) {
+            category = (NSString *)cachedCategory;
+        }
+    } else {
+        [WKApp shared].loginInfo.extra[@"category"] = category;
+        [[WKApp shared].loginInfo save];
+    }
+    if (category.length == 0) {
+        [[WKSDK shared].channelManager fetchChannelInfo:[WKChannel personWithChannelID:loginUID]];
+        return NO;
+    }
+    return [category isEqualToString:WKChannelCategoryService] || [category isEqualToString:WKChannelCategoryCustomerService];
+}
+
+/// 是否"明确可判定为非特权、普通成员"。
+/// 仅当所有关键信息（category、群成员角色）都已就绪且判定为普通用户时才返回 YES；
+/// 任一信息未就绪（首次打开会话时 channelInfo / 成员表还未同步）时返回 NO（保守显示删除按钮），
+/// 避免把群主/管理员/特权号误判为普通成员。
+static BOOL WKIsConfirmedNormalNonPrivileged(WKMessageModel *message, NSString *loginUID) {
+    if (loginUID.length == 0) {
+        return NO;
+    }
+    if (WKIsPrivilegedLoginAccount()) {
+        return NO;
+    }
+    WKChannelInfo *meInfo = [[WKSDK shared].channelManager getChannelInfo:[WKChannel personWithChannelID:loginUID]];
+    NSString *category = meInfo.category;
+    if (category.length == 0) {
+        id cachedCategory = [WKApp shared].loginInfo.extra[@"category"];
+        if ([cachedCategory isKindOfClass:[NSString class]]) {
+            category = (NSString *)cachedCategory;
+        }
+    }
+    if (category.length == 0) {
+        // category 尚未拉取 → 无法证明为非特权 → 保守显示
+        [[WKSDK shared].channelManager fetchChannelInfo:[WKChannel personWithChannelID:loginUID]];
+        return NO;
+    }
+    if (message.channel.channelType == WK_GROUP) {
+        BOOL isManager = [[WKSDK shared].channelManager isManager:message.channel memberUID:loginUID];
+        if (isManager) {
+            return NO;
+        }
+        // 仅在能从本地拿到成员记录时才视为"确认普通成员"，否则保守显示
+        WKChannelMember *member = [[WKSDK shared].channelManager getMember:message.channel uid:loginUID];
+        if (!member) {
+            return NO;
+        }
+        return member.role != WKMemberRoleCreator && member.role != WKMemberRoleManager;
+    }
+    return YES;
+}
+
 
 + (id)allocWithZone:(NSZone *)zone
 {
@@ -1478,15 +1543,8 @@ static  UIBackgroundTaskIdentifier _bgTaskToken;
         }
         
         BOOL isManager = false;
-        BOOL isPrivileged = false;
         NSString *loginUID = [WKApp shared].loginInfo.uid;
-        if(loginUID.length > 0) {
-            WKChannelInfo *meInfo = [[WKSDK shared].channelManager getChannelInfo:[WKChannel personWithChannelID:loginUID]];
-            NSString *category = meInfo.category;
-            if(category.length > 0) {
-                isPrivileged = [category isEqualToString:WKChannelCategoryService] || [category isEqualToString:WKChannelCategoryCustomerService];
-            }
-        }
+        BOOL isPrivileged = WKIsPrivilegedLoginAccount();
         if(message.channel.channelType == WK_GROUP) {
             isManager = [[WKSDK shared].channelManager isManager:message.channel memberUID:loginUID];
         }
@@ -1555,20 +1613,9 @@ static  UIBackgroundTaskIdentifier _bgTaskToken;
     [self setMethod:WKPOINT_LONGMENUS_DELETE handler:^id _Nullable(id  _Nonnull param) {
         WKMessageModel *message = param[@"message"];
         NSString *loginUID = [WKApp shared].loginInfo.uid;
-        BOOL isManager = false;
-        if(message.channel.channelType == WK_GROUP) {
-            isManager = [[WKSDK shared].channelManager isManager:message.channel memberUID:loginUID];
-        }
-        BOOL isPrivileged = false;
-        if(loginUID.length > 0) {
-            WKChannelInfo *meInfo = [[WKSDK shared].channelManager getChannelInfo:[WKChannel personWithChannelID:loginUID]];
-            NSString *category = meInfo.category;
-            if(category.length > 0) {
-                isPrivileged = [category isEqualToString:WKChannelCategoryService] || [category isEqualToString:WKChannelCategoryCustomerService];
-            }
-        }
-        BOOL canDeleteAnyMessage = isManager || isPrivileged;
-        if(![message isSend] && !canDeleteAnyMessage) {
+        // 仅当"明确可判定为普通成员且非特权号"时才隐藏删除按钮；
+        // 任何前置数据（category/群成员信息）尚未就绪时都保守显示，避免把群主/管理员/特权号误判为普通成员。
+        if(![message isSend] && WKIsConfirmedNormalNonPrivileged(message, loginUID)) {
             return nil;
         }
         if([message isSend] &&  [[NSDate date] timeIntervalSince1970] - message.timestamp < 2*60) { // 显示撤回就不显示删除
