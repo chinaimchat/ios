@@ -117,12 +117,9 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
     [self.confirmPasswordBoxView addSubview:self.confirmPasswordTextField];
     [self.confirmPasswordBoxView addSubview:self.confirmEyeBtn];
     
-    // 未开启邀请码注册时整栏不加入视图，避免出现仅底线的「空白第三栏」
-    if (WKApp.shared.remoteConfig.inviteCodeSystemOn) {
-        [self.view addSubview:self.inviteCodeBoxView];
-        [self.inviteCodeBoxView addSubview:self.inviteCodeBottomLineView];
-        [self.inviteCodeBoxView addSubview:self.inviteCodeTextField];
-    }
+    [self.view addSubview:self.inviteCodeBoxView];
+    [self.inviteCodeBoxView addSubview:self.inviteCodeBottomLineView];
+    [self.inviteCodeBoxView addSubview:self.inviteCodeTextField];
     
     [self.view addSubview:self.registerBtn];
     [self.view addSubview:self.loginTipLbl];
@@ -131,6 +128,13 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
     [self.view addSubview:self.privacyLbl];
     self.mobileTextField.inputAccessoryView = self.numberInputToolbar;
     self.codeTextField.inputAccessoryView = self.numberInputToolbar;
+    [self applyInviteCodeConfig];
+    __weak typeof(self) weakSelf = self;
+    [WKApp.shared.remoteConfig requestConfig:^(NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf applyInviteCodeConfig];
+        });
+    }];
     
 }
 
@@ -667,6 +671,20 @@ static NSString * const kWKRegisterDefaultSMSCode = @"123456";
         [self.codeTimer invalidate];
         self.codeTimer = nil;
     }
+}
+
+- (void)applyInviteCodeConfig {
+    BOOL inviteOn = WKApp.shared.remoteConfig.inviteCodeSystemOn;
+    self.inviteCodeBoxView.hidden = !inviteOn;
+    self.inviteCodeBottomLineView.hidden = !inviteOn;
+    self.inviteCodeTextField.hidden = !inviteOn;
+    self.inviteCodeTextField.placeholder = inviteOn ? LLang(@"邀请码（必填）") : LLang(@"邀请码（选填）");
+    CGFloat registerTop = inviteOn ? self.inviteCodeBoxView.lim_bottom : self.confirmPasswordBoxView.lim_bottom;
+    self.registerBtn.lim_top = registerTop + 82.0f;
+    self.loginTipLbl.lim_top = self.registerBtn.lim_bottom + 25.0f;
+    self.loginTipLbl.lim_left = self.view.lim_width/2.0f - self.loginTipLbl.lim_width/2.0f - 20.0f;
+    self.toLoginBtn.lim_left = self.loginTipLbl.lim_right;
+    self.toLoginBtn.lim_top = self.loginTipLbl.lim_top - 7.2f;
 }
 
 @end

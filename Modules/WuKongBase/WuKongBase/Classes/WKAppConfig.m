@@ -462,6 +462,8 @@
 
 @property(nonatomic,assign) BOOL startRequestAppModule;
 
+@property(nonatomic,strong) NSMutableArray *pendingConfigCallbacks;
+
 @end
 
 @implementation WKAppRemoteConfig
@@ -470,11 +472,18 @@
     self = [super init];
     if (self) {
         _showDeviceOnlineOn = 1;
+        _pendingConfigCallbacks = [NSMutableArray array];
     }
     return self;
 }
 
 -(void) requestConfig:(void(^)(NSError  * __nullable error))callback {
+    if (callback) {
+        [self.pendingConfigCallbacks addObject:[callback copy]];
+    }
+    if (self.requestSuccess) {
+        [self notifyPendingConfigCallbacks:nil];
+    }
     
     __weak typeof(self) weakSelf = self;
     if(!self.requestSuccess && !self.startRequest) {
@@ -507,15 +516,11 @@
             
             weakSelf.requestSuccess = true;
             weakSelf.startRequest = false;
-            if(callback) {
-                callback(nil);
-            }
+            [weakSelf notifyPendingConfigCallbacks:nil];
         }).catch(^(NSError *error){
             WKLogError(@"请求远程配置失败！->%@",error);
             weakSelf.startRequest = false;
-            if(callback) {
-                callback(error);
-            }
+            [weakSelf notifyPendingConfigCallbacks:error];
         });
     }
     if(!self.requestAppModuleSuccess && !self.startRequestAppModule) {
@@ -537,6 +542,20 @@
     }
     
     
+}
+
+- (void)notifyPendingConfigCallbacks:(NSError * _Nullable)error {
+    if (self.pendingConfigCallbacks.count == 0) {
+        return;
+    }
+    NSArray *callbacks = [self.pendingConfigCallbacks copy];
+    [self.pendingConfigCallbacks removeAllObjects];
+    for (id callbackObj in callbacks) {
+        void(^callback)(NSError * _Nullable error) = callbackObj;
+        if (callback) {
+            callback(error);
+        }
+    }
 }
 
 -(void) modules:(NSString*)sid on:(BOOL)on {
