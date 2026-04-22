@@ -22,23 +22,10 @@
 #import "SELUpdateAlert.h"
 
 
-#define SERVER_IP @"www.tu2t0.com" // domain or host
-#define HTTPS_ON false // https开关
+// 多域名入口：与 Android / Web 侧保持一致，具体 host 由 WKApiHostPool 从 11 个候选中选出（首次启动随机一个）。
+// 运行期失败时 WKAPIClient 会按池顺序自动切换下一个健康域名；不再把单一主域写死在此处。
+#define HTTPS_ON true // https开关
 
-
-#define BASE_URL [NSString stringWithFormat:@"%@://%@/v1/",HTTPS_ON?@"https":@"http",SERVER_IP]
-#define WEB_URL [NSString stringWithFormat:@"%@://%@/web/",HTTPS_ON?@"https":@"http",SERVER_IP]
-// api基地址
-#define API_BASE_URL  BASE_URL
-// 文件基地址
-#define FILE_BASE_URL BASE_URL
-// 文件预览地址
-#define FILE_BROWSE_URL BASE_URL
-// 图片预览地址
-#define IMAGE_BROWSE_URL BASE_URL
-
-// 举报地址
-#define REPORT_URL  [NSString stringWithFormat:@"%@://%@/web/report.html",HTTPS_ON?@"https":@"http",SERVER_IP]
 
 
 
@@ -64,15 +51,23 @@
     // 加载登录信息
     [[WKApp shared].loginInfo load];
 
+    // 多域名入口：从池中取当前首选 host 拼 base URL；运行期由 WKAPIClient 的故障切换自动跟随。
+    NSString *scheme = HTTPS_ON ? @"https" : @"http";
+    NSString *preferredHost = [WKApiHostPool preferredHost];
+    NSString *baseURL = [NSString stringWithFormat:@"%@://%@/v1/", scheme, preferredHost];
+    NSString *webURL  = [NSString stringWithFormat:@"%@://%@/web/", scheme, preferredHost];
+    NSString *wsURL   = [NSString stringWithFormat:@"wss://%@/ws", preferredHost];
+
     // app配置
     WKAppConfig *config = [WKAppConfig new];
-    config.apiBaseUrl = API_BASE_URL; // api地址
-    config.fileBaseUrl = FILE_BASE_URL; // 文件上传地址
-    config.fileBrowseUrl = FILE_BROWSE_URL; // 文件预览地址
-    config.imageBrowseUrl = IMAGE_BROWSE_URL; // 图片预览地址
-    config.reportUrl = [NSString stringWithFormat:@"%@report/html",API_BASE_URL]; //举报地址
-    config.privacyAgreementUrl = [NSString stringWithFormat:@"%@privacy_policy.html",WEB_URL]; //隐私协议
-    config.userAgreementUrl = [NSString stringWithFormat:@"%@user_agreement.html",WEB_URL]; //用户协议
+    config.apiBaseUrl = baseURL; // api地址
+    config.fileBaseUrl = baseURL; // 文件上传地址
+    config.fileBrowseUrl = baseURL; // 文件预览地址
+    config.imageBrowseUrl = baseURL; // 图片预览地址
+    config.reportUrl = [NSString stringWithFormat:@"%@report/html", baseURL]; //举报地址
+    config.privacyAgreementUrl = [NSString stringWithFormat:@"%@privacy_policy.html", webURL]; //隐私协议
+    config.userAgreementUrl = [NSString stringWithFormat:@"%@user_agreement.html", webURL]; //用户协议
+    config.connectURL = wsURL; // WebSocket 连接地址
     // 与 Android TSApplication：{@code WKCustomerServiceApplication.instance.init(WKBaseApplication.getInstance().appID)}，默认 {@code wukongchat}
     config.customerServiceAppId = @"wukongchat";
     [WKApp shared].config = config;

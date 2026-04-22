@@ -10,6 +10,7 @@
 #import "WKLogs.h"
 #import "WKModel.h"
 #import "WKApp.h"
+#import "WKApiHostPool.h"
 #import <objc/objc.h>
 
 @implementation  WKAPIClientConfig
@@ -119,23 +120,12 @@
     }
     [self logRequestStart:requestPath params:parameters method:@"GET"];
     __weak typeof(self) weakSelf = self;
-   return  [AnyPromise promiseWithResolverBlock:^(PMKResolver resolve) {
-        [weakSelf resetPublicHeader];
-       
-       NSURLSessionDataTask *task =[weakSelf.sessionManager GET:[NSString stringWithFormat:@"%@",[weakSelf pathURLEncode:requestPath]] parameters:parameters headers:nil progress:nil success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
-           [weakSelf logRequestEnd:task response:responseObject];
-           resolve(PMKManifold(responseObject,task));
-       } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
-           NSError *er;
-           if(weakSelf.config.errorHandler){
-              er =  weakSelf.config.errorHandler(nil,error);
-           }
-           if(!er) {
-               er = error;
-           }
-           resolve(er);
-       }];
-       [task resume];
+    return [AnyPromise promiseWithResolverBlock:^(PMKResolver resolve) {
+        [weakSelf performMethod:@"GET"
+                     requestPath:[weakSelf pathURLEncode:requestPath]
+                      parameters:parameters
+                         headers:nil
+                        resolver:resolve];
     }];
 }
 
@@ -304,24 +294,15 @@
     if(_config.requestPathReplace) {
         requestPath = _config.requestPathReplace(path);
     }
-     [self logRequestStart:requestPath params:parameters method:@"POST"];
-     __weak typeof(self) weakSelf = self;
-     return  [AnyPromise promiseWithResolverBlock:^(PMKResolver resolve) {
-         [weakSelf resetPublicHeader];
-         [weakSelf.sessionManager POST:[weakSelf pathURLEncode:requestPath] parameters:parameters headers:headers progress:nil success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
-             [weakSelf logRequestEnd:task response:responseObject];
-             resolve(PMKManifold(responseObject,task));
-         } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
-             NSError *er;
-             if(weakSelf.config.errorHandler){
-                 er =  weakSelf.config.errorHandler(nil,error);
-             }
-             if(!er) {
-                 er = error;
-             }
-             resolve(er);
-         }];
-     }];
+    [self logRequestStart:requestPath params:parameters method:@"POST"];
+    __weak typeof(self) weakSelf = self;
+    return [AnyPromise promiseWithResolverBlock:^(PMKResolver resolve) {
+        [weakSelf performMethod:@"POST"
+                    requestPath:[weakSelf pathURLEncode:requestPath]
+                     parameters:parameters
+                        headers:headers
+                       resolver:resolve];
+    }];
 }
 
 -(AnyPromise*) DELETE:(NSString*)path parameters:(nullable id)parameters{
@@ -331,20 +312,12 @@
     }
     [self logRequestStart:requestPath params:parameters method:@"DELETE"];
     __weak typeof(self) weakSelf = self;
-    return  [AnyPromise promiseWithResolverBlock:^(PMKResolver resolve) {
-        [weakSelf resetPublicHeader];
-        [weakSelf.sessionManager DELETE:[weakSelf pathURLEncode:requestPath] parameters:parameters headers:nil success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) { [weakSelf logRequestEnd:task response:responseObject];
-            resolve(PMKManifold(responseObject,task));
-        } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
-            NSError *er;
-            if(weakSelf.config.errorHandler){
-                er =  weakSelf.config.errorHandler(nil,error);
-            }
-            if(!er) {
-                er = error;
-            }
-            resolve(er);
-        }];
+    return [AnyPromise promiseWithResolverBlock:^(PMKResolver resolve) {
+        [weakSelf performMethod:@"DELETE"
+                    requestPath:[weakSelf pathURLEncode:requestPath]
+                     parameters:parameters
+                        headers:nil
+                       resolver:resolve];
     }];
 }
 
@@ -355,21 +328,119 @@
     }
     [self logRequestStart:requestPath params:parameters method:@"PUT"];
     __weak typeof(self) weakSelf = self;
-    return  [AnyPromise promiseWithResolverBlock:^(PMKResolver resolve) {
-        [weakSelf resetPublicHeader];
-        [weakSelf.sessionManager PUT:[weakSelf pathURLEncode:requestPath] parameters:parameters headers:nil success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) { [weakSelf logRequestEnd:task response:responseObject];
-            resolve(PMKManifold(responseObject,task));
-        } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
-            NSError *er;
-            if(weakSelf.config.errorHandler){
-                er =  weakSelf.config.errorHandler(nil,error);
-            }
-            if(!er) {
-                er = error;
-            }
-            resolve(er);
-        }];
+    return [AnyPromise promiseWithResolverBlock:^(PMKResolver resolve) {
+        [weakSelf performMethod:@"PUT"
+                    requestPath:[weakSelf pathURLEncode:requestPath]
+                     parameters:parameters
+                        headers:nil
+                       resolver:resolve];
     }];
+}
+
+#pragma mark - 多域名故障切换
+
+/**
+ 统一的"域名列表重试"执行器。
+ 按 WKApiHostPool.orderedHosts 顺序依次尝试；遇到网络级错误或 5xx 自动切到下一个 host。
+ - 成功：把当前 host 记为首选（savePreferredHost），后续请求直接命中。
+ - 全部失败：把最后一次错误 resolve 给上层，行为与原实现一致（不改变业务层错误处理）。
+ */
+- (void)performMethod:(NSString *)method
+           requestPath:(NSString *)requestPath
+            parameters:(id)parameters
+               headers:(NSDictionary<NSString *, NSString *> *)headers
+              resolver:(PMKResolver)resolve {
+    NSArray<NSString *> *orderedHosts = [WKApiHostPool orderedHosts];
+    [self attemptMethod:method
+            requestPath:requestPath
+             parameters:parameters
+                headers:headers
+                  hosts:orderedHosts
+              hostIndex:0
+               resolver:resolve];
+}
+
+- (void)attemptMethod:(NSString *)method
+           requestPath:(NSString *)requestPath
+            parameters:(id)parameters
+               headers:(NSDictionary<NSString *, NSString *> *)headers
+                 hosts:(NSArray<NSString *> *)hosts
+             hostIndex:(NSUInteger)hostIndex
+              resolver:(PMKResolver)resolve {
+    if (hostIndex >= hosts.count) {
+        NSError *err = [NSError errorWithDomain:@"WKAPIClient"
+                                           code:-1001
+                                       userInfo:@{NSLocalizedDescriptionKey:@"所有候选域名均不可用，请检查网络"}];
+        resolve(err);
+        return;
+    }
+    NSString *host = hosts[hostIndex];
+    NSString *urlString = [WKApiHostPool urlStringForPath:requestPath
+                                                targetHost:host
+                                               currentBase:self.sessionManager.baseURL];
+
+    [self resetPublicHeader];
+    __weak typeof(self) weakSelf = self;
+
+    void (^onSuccess)(NSURLSessionDataTask *, id) = ^(NSURLSessionDataTask *task, id responseObject) {
+        [weakSelf logRequestEnd:task response:responseObject];
+        [WKApiHostPool savePreferredHost:host];
+        resolve(PMKManifold(responseObject, task));
+    };
+    void (^onFailure)(NSURLSessionDataTask *, NSError *) = ^(NSURLSessionDataTask *task, NSError *error) {
+        if ([WKApiHostPool shouldFailoverForError:error task:task] && hostIndex + 1 < hosts.count) {
+            WKLogDebug(@"[域名切换] %@ 失败(%ld)，尝试下一个 host", host, (long)error.code);
+            [weakSelf attemptMethod:method
+                        requestPath:requestPath
+                         parameters:parameters
+                            headers:headers
+                              hosts:hosts
+                          hostIndex:hostIndex + 1
+                           resolver:resolve];
+            return;
+        }
+        NSError *er;
+        if (weakSelf.config.errorHandler) {
+            er = weakSelf.config.errorHandler(nil, error);
+        }
+        if (!er) {
+            er = error;
+        }
+        resolve(er);
+    };
+
+    if ([method isEqualToString:@"GET"]) {
+        NSURLSessionDataTask *t = [self.sessionManager GET:urlString
+                                                parameters:parameters
+                                                   headers:headers
+                                                  progress:nil
+                                                   success:onSuccess
+                                                   failure:onFailure];
+        [t resume];
+    } else if ([method isEqualToString:@"POST"]) {
+        [self.sessionManager POST:urlString
+                       parameters:parameters
+                          headers:headers
+                         progress:nil
+                          success:onSuccess
+                          failure:onFailure];
+    } else if ([method isEqualToString:@"PUT"]) {
+        [self.sessionManager PUT:urlString
+                      parameters:parameters
+                         headers:headers
+                         success:onSuccess
+                         failure:onFailure];
+    } else if ([method isEqualToString:@"DELETE"]) {
+        [self.sessionManager DELETE:urlString
+                         parameters:parameters
+                            headers:headers
+                            success:onSuccess
+                            failure:onFailure];
+    } else {
+        NSError *err = [NSError errorWithDomain:@"WKAPIClient" code:-1002
+                                       userInfo:@{NSLocalizedDescriptionKey:[NSString stringWithFormat:@"unsupported method: %@", method]}];
+        resolve(err);
+    }
 }
 
 
